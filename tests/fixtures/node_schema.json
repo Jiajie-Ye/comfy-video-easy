@@ -1,0 +1,523 @@
+{
+  "VAELoader": {
+    "input": {
+      "required": {
+        "vae_name": [
+          [
+            "minimax_h3_audio_vae_fp32.safetensors",
+            "minimax_h3_video_vae_fp16.safetensors"
+          ]
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "VAE"
+    ]
+  },
+  "CLIPLoader": {
+    "input": {
+      "required": {
+        "clip_name": [
+          [
+            "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+          ]
+        ],
+        "type": [
+          [
+            "minimax"
+          ]
+        ]
+      },
+      "optional": {
+        "device": [
+          [
+            "default"
+          ]
+        ]
+      }
+    },
+    "output": [
+      "CLIP"
+    ]
+  },
+  "UNETLoader": {
+    "input": {
+      "required": {
+        "unet_name": [
+          [
+            "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+          ]
+        ],
+        "weight_dtype": [
+          [
+            "default"
+          ]
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "MODEL"
+    ]
+  },
+  "LoraLoaderModelOnly": {
+    "input": {
+      "required": {
+        "model": [
+          "MODEL"
+        ],
+        "lora_name": [
+          [
+            "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+          ]
+        ],
+        "strength_model": [
+          "FLOAT"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "MODEL"
+    ]
+  },
+  "ResolutionSelector": {
+    "input": {
+      "required": {
+        "aspect_ratio": [
+          "COMBO"
+        ],
+        "megapixels": [
+          "FLOAT"
+        ],
+        "multiple": [
+          "INT"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "INT",
+      "INT"
+    ]
+  },
+  "LoadImage": {
+    "input": {
+      "required": {
+        "image": [
+          [
+            "example.png"
+          ]
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "IMAGE",
+      "MASK"
+    ]
+  },
+  "LayerUtility: ImageScaleByAspectRatio V2": {
+    "input": {
+      "required": {
+        "aspect_ratio": [
+          [
+            "original"
+          ]
+        ],
+        "proportional_width": [
+          "INT"
+        ],
+        "proportional_height": [
+          "INT"
+        ],
+        "fit": [
+          [
+            "crop"
+          ]
+        ],
+        "method": [
+          [
+            "lanczos"
+          ]
+        ],
+        "round_to_multiple": [
+          [
+            "32"
+          ]
+        ],
+        "scale_to_side": [
+          [
+            "total_pixel(kilo pixel)"
+          ]
+        ],
+        "scale_to_length": [
+          "INT"
+        ],
+        "background_color": [
+          "STRING"
+        ]
+      },
+      "optional": {
+        "image": [
+          "IMAGE"
+        ]
+      }
+    },
+    "output": [
+      "IMAGE",
+      "MASK",
+      "BOX",
+      "INT",
+      "INT"
+    ]
+  },
+  "LoadAudio": {
+    "input": {
+      "required": {
+        "audio": [
+          "COMBO"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "AUDIO"
+    ]
+  },
+  "VHS_LoadVideo": {
+    "input": {
+      "required": {
+        "video": [
+          [
+            "example.mp4"
+          ]
+        ],
+        "force_rate": [
+          "FLOAT"
+        ],
+        "custom_width": [
+          "INT"
+        ],
+        "custom_height": [
+          "INT"
+        ],
+        "frame_load_cap": [
+          "INT"
+        ],
+        "skip_first_frames": [
+          "INT"
+        ],
+        "select_every_nth": [
+          "INT"
+        ]
+      },
+      "optional": {
+        "format": [
+          [
+            "None"
+          ]
+        ]
+      }
+    },
+    "output": [
+      "IMAGE",
+      "INT",
+      "AUDIO",
+      "VHS_VIDEOINFO"
+    ]
+  },
+  "MiniMaxH3ReferenceToVideo": {
+    "input": {
+      "required": {
+        "clip": [
+          "CLIP"
+        ],
+        "prompt": [
+          "STRING"
+        ],
+        "width": [
+          "INT"
+        ],
+        "height": [
+          "INT"
+        ],
+        "length": [
+          "INT"
+        ],
+        "ref_image_size": [
+          "COMBO"
+        ]
+      },
+      "optional": {
+        "vae": [
+          "VAE"
+        ],
+        "audio_vae": [
+          "VAE"
+        ]
+      }
+    },
+    "output": [
+      "CONDITIONING",
+      "LATENT"
+    ]
+  },
+  "RandomNoise": {
+    "input": {
+      "required": {
+        "noise_seed": [
+          "INT"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "NOISE"
+    ]
+  },
+  "BasicGuider": {
+    "input": {
+      "required": {
+        "model": [
+          "MODEL"
+        ],
+        "conditioning": [
+          "CONDITIONING"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "GUIDER"
+    ]
+  },
+  "KSamplerSelect": {
+    "input": {
+      "required": {
+        "sampler_name": [
+          "COMBO"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "SAMPLER"
+    ]
+  },
+  "BasicScheduler": {
+    "input": {
+      "required": {
+        "model": [
+          "MODEL"
+        ],
+        "scheduler": [
+          "COMBO"
+        ],
+        "steps": [
+          "INT"
+        ],
+        "denoise": [
+          "FLOAT"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "SIGMAS"
+    ]
+  },
+  "SamplerCustomAdvanced": {
+    "input": {
+      "required": {
+        "noise": [
+          "NOISE"
+        ],
+        "guider": [
+          "GUIDER"
+        ],
+        "sampler": [
+          "SAMPLER"
+        ],
+        "sigmas": [
+          "SIGMAS"
+        ],
+        "latent_image": [
+          "LATENT"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "LATENT",
+      "LATENT"
+    ]
+  },
+  "VAEDecode": {
+    "input": {
+      "required": {
+        "samples": [
+          "LATENT"
+        ],
+        "vae": [
+          "VAE"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "IMAGE"
+    ]
+  },
+  "VAEDecodeAudio": {
+    "input": {
+      "required": {
+        "samples": [
+          "LATENT"
+        ],
+        "vae": [
+          "VAE"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "AUDIO"
+    ]
+  },
+  "VHS_VideoCombine": {
+    "input": {
+      "required": {
+        "images": [
+          "IMAGE"
+        ],
+        "frame_rate": [
+          "FLOAT"
+        ],
+        "loop_count": [
+          "INT"
+        ],
+        "filename_prefix": [
+          "STRING"
+        ],
+        "format": [
+          [
+            "video/h264-mp4"
+          ]
+        ],
+        "pingpong": [
+          "BOOLEAN"
+        ],
+        "save_output": [
+          "BOOLEAN"
+        ]
+      },
+      "optional": {
+        "audio": [
+          "AUDIO"
+        ]
+      }
+    },
+    "output": [
+      "VHS_FILENAMES"
+    ]
+  },
+  "ImageResizeKJv2": {
+    "input": {
+      "required": {
+        "image": [
+          "IMAGE"
+        ],
+        "width": [
+          "INT"
+        ],
+        "height": [
+          "INT"
+        ],
+        "upscale_method": [
+          [
+            "lanczos"
+          ]
+        ],
+        "keep_proportion": [
+          [
+            "crop"
+          ]
+        ],
+        "pad_color": [
+          "STRING"
+        ],
+        "crop_position": [
+          [
+            "center"
+          ]
+        ],
+        "divisible_by": [
+          "INT"
+        ]
+      },
+      "optional": {
+        "device": [
+          [
+            "cpu"
+          ]
+        ]
+      }
+    },
+    "output": [
+      "IMAGE",
+      "INT",
+      "INT",
+      "MASK"
+    ]
+  },
+  "VAEEncode": {
+    "input": {
+      "required": {
+        "pixels": [
+          "IMAGE"
+        ],
+        "vae": [
+          "VAE"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "LATENT"
+    ]
+  },
+  "VAEEncodeAudio": {
+    "input": {
+      "required": {
+        "audio": [
+          "AUDIO"
+        ],
+        "vae": [
+          "VAE"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "LATENT"
+    ]
+  },
+  "PT_H3ConcatAVLatent": {
+    "input": {
+      "required": {
+        "video_latent": [
+          "LATENT"
+        ],
+        "audio_latent": [
+          "LATENT"
+        ]
+      },
+      "optional": {}
+    },
+    "output": [
+      "LATENT"
+    ]
+  }
+}
