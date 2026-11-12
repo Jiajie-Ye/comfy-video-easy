@@ -13,8 +13,11 @@ from PyQt6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 import engine as E
 from editor_ui import Editor
+import prompt_enhancer as PE
+import workspaces as WS
+from enhancer_ui import EnhancementSettings,EnhancementReview
 
-VERSION='0.4.0'
+VERSION='0.5.0'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -73,6 +76,10 @@ QProgressBar {border:0;background:#e6efff;height:3px;max-height:3px;border-radiu
 QProgressBar::chunk {background:#4b8aeb;border-radius:1px;}
 QToolTip {background:#292a27;color:#ffffff;border:0;padding:7px;}
 QMessageBox {background:#ffffff;}
+QTabWidget::pane {border:1px solid #dce5f2;border-radius:12px;background:white;top:-1px;}
+QTabBar::tab {background:#f2f6fc;color:#60738f;border:1px solid #dce5f2;border-top-left-radius:9px;border-top-right-radius:9px;padding:10px 18px;margin-right:5px;}
+QTabBar::tab:selected {background:#e6efff;color:#245eab;border-color:#bcd3f5;}
+
 QPushButton#accent {background:#e8f1ff;color:#245eab;border:1px solid #bcd3f5;border-radius:9px;padding:6px 10px;font-size:12px;}
 QPushButton#accent:hover {background:#d8e8ff;border-color:#90b6ec;}
 QPushButton#accent:disabled {background:#f2f5fa;color:#97a7bb;border-color:#e0e7f1;}
@@ -157,12 +164,13 @@ class Picker(QFrame):
 class Window(QMainWindow):
     def __init__(self,data_dir):
         super().__init__();self.data=Path(data_dir);self.data.mkdir(parents=True,exist_ok=True)
-        self.lang='zh';self.config=E.defaults();self.output=str(self.data/'视频作品');self.page=0;self.busy=False;self.stop=threading.Event()
+        self.lang='zh';self.config=E.defaults();self.output=str(self.data/'视频作品');self.history_roots=[];self.page=0;self.busy=False;self.stop=threading.Event()
         self.status_pair=('准备好开始创作了','Ready when you are');self.raw_status=None;self.connected=False
         self.tool_video='';self.tool_dir='';self.tool_result='';self.selected_id=None;self.jobs={};self.worker=None;self.qt_translator=None
         try:
-            old=json.loads((self.data/'settings.json').read_text('utf-8'));self.config.update(old.get('config',{}));self.output=old.get('output',self.output);self.lang=old.get('language','zh')
+            old=json.loads((self.data/'settings.json').read_text('utf-8'));self.config.update(old.get('config',{}));self.output=old.get('output',self.output);self.lang=old.get('language','zh');self.history_roots=old.get('history_roots',[])
         except (OSError,ValueError):pass
+        self.history_roots=WS.unique_roots([*self.history_roots,self.output])
         if self.lang not in ('zh','en'):self.lang='zh'
         self.bridge=Bridge();self.bridge.event.connect(self.on_event)
         self.player=QMediaPlayer(self);self.audio=QAudioOutput(self);self.audio.setVolume(.7);self.player.setAudioOutput(self.audio)
@@ -252,7 +260,7 @@ class Window(QMainWindow):
         self.section(left,self.t('你想创造怎样的画面？','What would you like to create?'))
         self.prompt=QTextEdit();self.prompt.setAcceptRichText(False);self.prompt.setPlainText(self.config['prompt']);self.prompt.setMinimumHeight(235)
         self.prompt.setPlaceholderText(self.t('用英文描述场景、人物与动作…\n对白可以直接写中文。\n\n使用 <Picture 1> 引用第一张图片。','Describe the scene, characters and action…\nChinese dialogue can stay in Chinese.\n\nUse <Picture 1> for your first image.'));left.addWidget(self.prompt)
-        tools=QHBoxLayout();tools.addWidget(self.button(self.t('试试示例','Try an example'),self.example,'quiet'));tools.addStretch();tools.addWidget(self.label('Ctrl + Enter','muted'));left.addLayout(tools)
+        tools=QHBoxLayout();tools.addWidget(self.button(self.t('试试示例','Try an example'),self.example,'quiet'));self.enhance_button=self.button(self.t('剧本提示词增强','Enhance prompt'),self.enhance_prompt,'accent');tools.addWidget(self.enhance_button);self.enhance_settings_button=self.button(self.t('增强设置','Settings'),self.configure_enhancer,'quiet');tools.addWidget(self.enhance_settings_button);tools.addStretch();left.addLayout(tools)
         options=QHBoxLayout();a=QVBoxLayout();b=QVBoxLayout();a.addWidget(self.label(self.t('时长','Duration'),'muted'));duration=QSpinBox();duration.setRange(1,15);duration.setSingleStep(1);duration.setSuffix(self.t(' 秒',' seconds'));duration.setValue(int(float(self.config['seconds'])));duration.setToolTip(self.t('滚动鼠标滚轮、点击上下箭头，或输入 1–15 秒。','Use the mouse wheel, arrow buttons, or enter 1–15 seconds.'));self.controls['seconds']=duration;a.addWidget(duration);b.addWidget(self.label(self.t('画面比例','Aspect ratio'),'muted'));b.addWidget(self.combo('ratio',[(x,self.t(x,RATIO_EN[x])) for x in E.RATIOS]));options.addLayout(a);options.addLayout(b);left.addLayout(options)
         left.addSpacing(8);left.addWidget(self.checkbox('fixed','固定一采种子','Keep first-pass seed'));left.addWidget(self.checkbox('second','开启二次采样强化','Enable second-pass refinement'))
         left.addWidget(self.label(self.t('先生成一采，满意后可在“我的任务”中继续强化。','Start with a first pass. Refine a result you like from My tasks.'),'muted',True));left.addStretch()
@@ -261,18 +269,79 @@ class Window(QMainWindow):
             picker=Picker(self,key,zh,en,tag,limit,pattern);self.pickers[key]=picker;right.addWidget(picker)
         right.addWidget(self.checkbox('video_audio','同时参考视频原声','Use reference video sound'));right.addStretch()
         save=QHBoxLayout();save.addWidget(self.label(self.t('保存到','Save to'),'muted'));self.output_edit=QLineEdit(self.output);save.addWidget(self.output_edit,1);save.addWidget(self.button(self.t('更改','Change'),self.choose_output));v.addLayout(save)
+    def configure_enhancer(self):
+        if self.busy:return None
+        dialog=EnhancementSettings(self,PE.load_config(self.data))
+        return dialog.result_config if dialog.exec()==QDialog.DialogCode.Accepted else None
+    def enhance_prompt(self):
+        if self.busy:return
+        draft=self.prompt.toPlainText().strip()
+        if not draft:self.info(self.t('请先在描述框写下大概剧情，再点击增强。','Write a rough story in the prompt box first.'));return
+        cfg=PE.load_config(self.data)
+        try:
+            PE.validate(cfg)
+            if cfg.get('key_locked'):raise ValueError('key locked')
+        except (ValueError,KeyError,TypeError):
+            cfg=self.configure_enhancer()
+            if cfg is None:return
+        context=dict(seconds=self.controls['seconds'].value(),ratio=self.controls['ratio'].currentData(),**{key:len(value.paths) for key,value in self.pickers.items()})
+        def work():
+            self.emit('pair',('正在增强剧本提示词…','Enhancing your video prompt…'))
+            result=PE.enhance(cfg,draft,context);self.emit('enhanced',dict(draft=draft,result=result))
+        self.start_worker(work)
+    def review_enhancement(self,value):
+        # Keep originals/results locally; no credentials or endpoint configuration in history.
+        history=self.data/'prompt_history';history.mkdir(parents=True,exist_ok=True)
+        E.atomic_json(E.unique_path(history/(time.strftime('%Y%m%d_%H%M%S')+'.json')),value)
+        dialog=EnhancementReview(self,value['draft'],value['result'])
+        if dialog.exec()==QDialog.DialogCode.Accepted:
+            current=self.prompt.toPlainText().strip()
+            if current!=value['draft'] and not self.confirm(self.t('等待增强时你修改了原文。仍要应用增强结果？','You edited the draft while waiting. Apply the enhanced result anyway?')):return
+            cursor=self.prompt.textCursor();cursor.select(cursor.SelectionType.Document);cursor.insertText(dialog.result_text);self.prompt.setTextCursor(cursor);self.save_preferences()
+            self.raw_status=None;self.status_pair=('增强结果已应用，可用 Ctrl+Z 撤销。','Enhanced prompt applied. Press Ctrl+Z to undo.')
+        else:self.raw_status=None;self.status_pair=('已保留原文，增强结果已存入本地历史。','Original kept. The enhanced result is saved in local history.')
     def example(self):
         if self.prompt.toPlainText().strip() and not self.confirm(self.t('替换当前描述为示例？','Replace your current prompt with the example?')):return
         self.prompt.setPlainText('A cinematic medium shot in a quiet courtyard. The camera slowly pushes in. A person looks at the camera and says in Mandarin Chinese: “大家好，欢迎来到我的视频！” Natural daylight, clear dialogue, light wind, no background music.')
+    def set_output(self,path):
+        self.history_roots=WS.unique_roots([*self.history_roots,self.output,path]);self.output=str(Path(path).resolve());self.output_edit.setText(self.output)
+        if hasattr(self,'settings_output'):self.settings_output.setText(self.output)
+        self.save_preferences();self.refresh_history()
     def choose_output(self):
         p=QFileDialog.getExistingDirectory(self,self.t('选择保存文件夹','Choose output folder'),self.output_edit.text())
-        if p:self.output_edit.setText(p);self.output=p;self.refresh_history()
+        if p:self.set_output(p)
+    def task_manifests(self):return WS.manifests([*self.history_roots,self.output_edit.text()])
+    def import_history(self):
+        folder=QFileDialog.getExistingDirectory(self,self.t('选择旧版程序、数据或视频作品文件夹','Choose an old app, data or output folder'))
+        if not folder:return
+        roots=WS.import_roots(folder)
+        if not roots:self.info(self.t('未找到任务记录。请选择含有 settings.json 或 task.json 的旧目录。','No task records found. Choose the old data/output folder containing settings.json or task.json.'));return
+        self.history_roots=WS.unique_roots([*self.history_roots,*roots]);self.save_preferences();self.refresh_history();self.info(self.t(f'已接入历史目录，当前共 {len(self.jobs)} 条任务。',f'History folders linked. {len(self.jobs)} tasks available.'))
+    def choose_workspace(self):
+        if self.busy or self.editor.busy:return
+        folder=QFileDialog.getExistingDirectory(self,self.t('选择固定工作目录','Choose a persistent workspace'),str(self.data))
+        if not folder or Path(folder).resolve()==self.data.resolve():return
+        if not self.confirm(self.t('将配置、草稿及辅助文件复制到此目录，原目录和视频不删除。已有配置将沿用；历史视频仍会显示。之后各版本都使用此工作目录。继续？','Copy settings, drafts and support files here without deleting old data/videos? Existing target settings are kept, and old videos stay listed. Future versions will use this workspace.')):return
+        self.save_preferences();self.editor.save();old=self.data
+        def work():
+            self.emit('pair',('正在保存并切换工作目录…','Saving and switching workspace…'));self.emit('workspace_changed',str(WS.switch_workspace(old,folder)))
+        self.start_worker(work)
+    def apply_workspace(self,folder):
+        self.editor.pause();self.data=Path(folder);saved=json.loads((self.data/'settings.json').read_text('utf-8'));self.config=E.defaults();self.config.update(saved.get('config',{}));self.output=saved.get('output',str(self.data/'视频作品'));self.history_roots=saved.get('history_roots',[]);self.tool_video='';self.tool_dir='';self.tool_result='';self.selected_id=None
+        # Save the old editor before changing its data target; the destination draft is loaded by build().
+        self.editor.project=None
+        self.build();self.raw_status=None;self.status_pair=('工作目录已切换，之后各版本会自动沿用。','Workspace changed. Future versions will reuse it.')
     def reset_parameters(self):
         if self.busy or self.editor.busy:return
         self.capture()
         self.config.update({key:value for key,value in E.defaults().items() if key not in ('server','prompt','images','audios','videos')})
         self.build();self.save_preferences();self.raw_status=None;self.status_pair=('生成参数已恢复默认。','Generation parameters restored to defaults.');self.update_status()
     def settings_page(self,v):
+        self.section(v,self.t('工作目录与视频保存','Workspace and video storage'))
+        v.addWidget(self.label(self.t('各版本共用同一工作目录；切换保存目录不会隐藏以前的任务。','All versions share this workspace. Changing output folders keeps previous tasks visible.'),'muted',True))
+        work=QHBoxLayout();self.workspace_display=QLineEdit(str(self.data));self.workspace_display.setReadOnly(True);work.addWidget(self.workspace_display,1);self.workspace_button=self.button(self.t('更改工作目录','Change workspace'),self.choose_workspace);work.addWidget(self.workspace_button);v.addLayout(work)
+        out=QHBoxLayout();self.settings_output=QLineEdit(self.output);self.settings_output.setReadOnly(True);out.addWidget(self.settings_output,1);out.addWidget(self.button(self.t('视频保存到…','Video output…'),self.choose_output));out.addWidget(self.button(self.t('恢复默认目录','Default folder'),lambda:self.set_output(self.data/'视频作品')));v.addLayout(out)
+        v.addWidget(self.button(self.t('导入旧任务目录','Import old task folder'),self.import_history))
         reset_row=QHBoxLayout();reset_row.addStretch();self.reset_button=self.button(self.t('恢复默认参数','Restore default parameters'),self.reset_parameters);reset_row.addWidget(self.reset_button);v.addLayout(reset_row)
         cols=QHBoxLayout();cols.setSpacing(28);v.addLayout(cols);first=QVBoxLayout();second=QVBoxLayout();cols.addLayout(first,1);cols.addLayout(second,1)
         def field(layout,zh,en,key,options=None):
@@ -292,7 +361,7 @@ class Window(QMainWindow):
         self.section(v,self.t('服务器','Server'));v.addWidget(self.entry('server'));v.addWidget(self.label(self.t('填写你自己的 ComfyUI 地址；支持本机、局域网或 Tailscale。','Enter your own ComfyUI URL: local, LAN, or Tailscale.'),'muted'))
     def history_page(self,v):
         v.setSpacing(10)
-        h=QHBoxLayout();h.addWidget(self.label(self.t('最近的创作','Recent creations'),'section'));h.addStretch();h.addWidget(self.button(self.t('刷新','Refresh'),self.refresh_history));v.addLayout(h)
+        h=QHBoxLayout();h.addWidget(self.label(self.t('最近的创作','Recent creations'),'section'));h.addStretch();h.addWidget(self.button(self.t('导入旧任务','Import old tasks'),self.import_history));h.addWidget(self.button(self.t('刷新','Refresh'),self.refresh_history));v.addLayout(h)
         self.table=QTableWidget(0,3);self.table.setHorizontalHeaderLabels([self.t('时间','Created'),self.t('状态','Status'),self.t('实际一采种子','Actual first-pass seed')]);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch);self.table.verticalHeader().hide();self.table.verticalHeader().setDefaultSectionSize(48);self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows);self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection);self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers);self.table.setShowGrid(False);self.table.setMinimumHeight(120);self.table.setMaximumHeight(150);self.table.itemSelectionChanged.connect(self.select_job);v.addWidget(self.table)
         h=QHBoxLayout()
         for zh,en,fn in [('继续查询 / 下载','Resume / download',self.resume),('用这条做二采','Refine this result',self.refine),('载入参数','Load settings',self.load_job),('打开文件夹','Open folder',self.open_folder)]:h.addWidget(self.button(self.t(zh,en),fn))
@@ -327,9 +396,11 @@ class Window(QMainWindow):
     def refresh_history(self):
         if not hasattr(self,'table'):return
         self.output=self.output_edit.text();self.jobs={};self.table.blockSignals(True);self.table.setRowCount(0)
-        for f in sorted(Path(self.output).glob('*/task.json'),reverse=True)[:300]:
+        for f in self.task_manifests():
             try:
-                j=json.loads(f.read_text('utf-8'));j['folder']=str(f.parent);self.jobs[j['id']]=j;r=self.table.rowCount();self.table.insertRow(r)
+                j=WS.resolve_job_files(json.loads(f.read_text('utf-8')),f.parent)
+                if j['id'] in self.jobs:continue
+                j['folder']=str(f.parent);self.jobs[j['id']]=j;r=self.table.rowCount();self.table.insertRow(r)
                 for c,value in enumerate([j['created'],self.translate_status(j['status']),str(j['settings']['seed'])]):
                     item=QTableWidgetItem(value);item.setData(Qt.ItemDataRole.UserRole,j['id']);self.table.setItem(r,c,item)
                 if j['id']==self.selected_id:self.table.selectRow(r)
@@ -433,9 +504,9 @@ class Window(QMainWindow):
         return result[0] if result else None
     def completed_video_choices(self):
         choices=[];seen=set()
-        for manifest in sorted(Path(self.output_edit.text()).glob('*/task.json'),reverse=True)[:300]:
+        for manifest in self.task_manifests():
             try:
-                job=json.loads(manifest.read_text('utf-8'))
+                job=WS.resolve_job_files(json.loads(manifest.read_text('utf-8')),manifest.parent)
                 if job.get('status')!='已完成':continue
                 prompt=' '.join(str(job.get('settings',{}).get('prompt','')).split())[:100]
                 for filename in reversed(job.get('files',[])):
@@ -505,7 +576,7 @@ class Window(QMainWindow):
             elif isinstance(value,float):c[k]=float(c[k])
         return c
     def save_preferences(self):
-        self.capture();E.atomic_json(self.data/'settings.json',{'config':self.config,'output':self.output,'language':self.lang})
+        self.history_roots=WS.unique_roots([*self.history_roots,self.output,self.output_edit.text()]);self.capture();E.atomic_json(self.data/'settings.json',{'config':self.config,'output':self.output,'language':self.lang,'history_roots':self.history_roots})
     def toggle_language(self):
         if hasattr(self,'editor') and self.editor.busy:return
         self.capture();self.lang='en' if self.lang=='zh' else 'zh';self.build();self.save_preferences()
@@ -520,7 +591,7 @@ class Window(QMainWindow):
     def update_status(self):self.status.setText(self.translate_status(self.raw_status) if self.raw_status is not None else self.t(*self.status_pair))
     def emit(self,name,value):self.bridge.event.emit(name,value)
     def sync_busy(self):
-        self.reset_button.setEnabled(not self.busy);self.reference_frame_button.setEnabled(not self.busy);self.run.setEnabled(not self.busy);self.check.setEnabled(not self.busy);self.extract_button.setEnabled(not self.busy);self.progress.setVisible(self.busy)
+        self.workspace_button.setEnabled(not self.busy);self.enhance_button.setEnabled(not self.busy);self.enhance_settings_button.setEnabled(not self.busy);self.reset_button.setEnabled(not self.busy);self.reference_frame_button.setEnabled(not self.busy);self.run.setEnabled(not self.busy);self.check.setEnabled(not self.busy);self.extract_button.setEnabled(not self.busy);self.progress.setVisible(self.busy)
         self.language.setEnabled(not (hasattr(self,'editor') and self.editor.busy))
         self.run.setText(self.t('处理中…','Working…') if self.busy else self.t('开始生成  ↗','Generate video  ↗'))
     def start_worker(self,fn):
@@ -540,6 +611,8 @@ class Window(QMainWindow):
         elif name=='pair':self.raw_status=None;self.status_pair=value
         elif name=='connected':self.connected=True;self.connection.setText(self.t('● 已连接','● Connected'))
         elif name=='refresh':self.refresh_history()
+        elif name=='workspace_changed':self.apply_workspace(value)
+        elif name=='enhanced':self.review_enhancement(value)
         elif name=='reference_frame':self.add_reference_frame(value)
         elif name=='frame':self.tool_result=value;self.frame_label.setText(value);self.raw_status=None;self.status_pair=('末帧已保存，可以打开图片了。','Last frame saved. Your image is ready.')
         elif name=='completed':self.selected_id=value['id'];self.refresh_history();self.raw_status=None;self.status_pair=('视频已保存，可以播放或继续强化。','Video saved. Play it or refine it further.')
@@ -615,7 +688,9 @@ def self_test(folder,check_server=False):
         import edit_engine as X
         clip=X.new_clip(video);clip['end']=.5
         edited=folder/'edited.mp4';X.export_video([clip,clip],edited,(64,64),[dict(start=.1,end=.4,text='Test')],True)
-        assert abs(float(E.inspect_video(edited)['format']['duration'])-1)<.2;report['checks'].append('trim_concat_subtitle_export');w.close()
+        assert abs(float(E.inspect_video(edited)['format']['duration'])-1)<.2;report['checks'].append('trim_concat_subtitle_export')
+        cfg=PE.defaults();cfg.update(url='https://example.invalid/v1',model='test',api_key='test-key')
+        url,headers,body=PE.request_data(cfg,'A person walks into a courtyard.',dict(seconds=10,images=0,audios=0,videos=0));assert url.endswith('/chat/completions');assert cfg['template'];report['checks'].append('enhancer_template_and_payload');w.close()
         if check_server:report['server']=E.Client().json('/system_stats')['system']['comfyui_version']
         report['passed']=True
     except Exception:report['passed']=False;report['error']=traceback.format_exc()
@@ -626,10 +701,11 @@ if __name__=='__main__':
     if args.self_test:sys.exit(self_test(args.self_test,args.check_server))
     app=QApplication(sys.argv);app.setStyle('Fusion')
     base=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).parent
-    data=args.data_dir or str(base/'我的视频数据')
+    data=args.data_dir or str(WS.startup_workspace(base))
     try:
         Path(data).mkdir(parents=True,exist_ok=True);probe=Path(data)/'.write_check';probe.write_text('ok');probe.unlink()
     except OSError:
         data=QFileDialog.getExistingDirectory(None,'选择数据文件夹 / Choose a data folder')
         if not data:sys.exit(0)
+    if not args.data_dir:WS.remember(data)
     w=Window(data);w.show();sys.exit(app.exec())

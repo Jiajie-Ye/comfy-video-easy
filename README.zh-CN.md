@@ -61,7 +61,23 @@ python modern_app.py
 
 图片最多 9 张，音频和视频各 3 段；参考视频仍要求 2–15 秒。输出时长按模型的 `17k+5` 帧网格、24 fps 对齐，可能略长于设置值。1–4 秒短于模型标注的常用训练范围，生成质量未验证。二采操作会重建一采及二采 API 图，并非读取先前任务的内部 latent 缓存。
 
-任务、设置和素材路径保存在程序旁的“我的视频数据”文件夹；可用 `--data-dir` 指定其他位置。升级时保留该文件夹。它可能含私人 Prompt、服务器地址和素材路径，不应提交到公开仓库。
+任务、设置和素材路径保存在下文说明的固定工作目录中，升级时保留该目录。它可能含私人 Prompt、服务器地址和素材路径，不应提交到公开仓库。
+
+## 剧本提示词增强
+
+点击描述框下方“剧本提示词增强”，首次填写接口格式、URL、API KEY 和准确模型名；以后直接使用保存的配置。“增强设置”中可随时修改。支持 OpenAI Compatible、OpenAI Responses、Anthropic、Google Gemini，以及使用 Bedrock Bearer API Key 的 Amazon Bedrock Converse（不支持 AWS Access Key 签名认证）。
+
+“参考格式文本”页支持直接粘贴或导入 TXT / Markdown。内置通用格式整理素材映射、连续性、时长、分镜、声音和限制条件，不套用示例剧情。只发送剧情、参考格式、时长和素材数量，不发送媒体文件或本地路径。结果先预览、可编辑，再应用；Ctrl+Z 可撤销，原文和结果另存在本地 `prompt_history` 中。
+
+API KEY 使用 Windows 当前账号 DPAPI 加密保存，不写入任务记录或日志；换电脑或账号后需重新填写。兼容 Chat 接口由服务商决定输出上限，其他接口提供输出长度设置。各服务商模型支持情况不同，协议测试使用模拟返回；真实调用需要填写自己的接口配置。
+
+## 固定工作目录与旧任务
+
+新版通过 `%LOCALAPPDATA%/ComfyVideoEasy/workspace.json` 记住同一 Windows 用户的工作目录。全新安装默认使用用户文档下的 `AI视频助手工作区`；没有目录记录时，若 EXE 旁存在旧“我的视频数据”，会优先接入。显式 `--data-dir` 参数不修改固定目录记录。
+
+在高级设置里可选择固定工作目录和独立的视频保存目录，并恢复工作目录下默认的“视频作品”目录。换保存目录会保留旧任务来源，不再让历史列表变空。“我的任务”或设置里的“导入旧任务”可选择旧程序文件夹、旧数据文件夹或包含 task.json 的视频作品目录；复制过的任务文件夹会尝试使用同目录下的视频。
+
+切换工作目录会复制配置、草稿和辅助文件，已有目标配置不会覆盖。旧视频保留原处并继续显示，因此不要删除旧视频所在目录。升级只需替换 EXE，保留固定工作目录。配置、剧情、加密密钥和媒体不提交到 GitHub。
 
 ## 简易视频剪辑
 
@@ -87,7 +103,7 @@ python build_exe.py
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_modern test_engine test_editing -v
+python -m unittest test_modern test_engine test_editing test_enhancer test_workspaces -v
 ```
 
 离线测试使用最小、去除服务器枚举的节点 fixture，不代表真实服务器所有版本的兼容性，也不会提交 GPU 任务。

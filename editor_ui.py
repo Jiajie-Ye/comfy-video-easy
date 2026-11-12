@@ -80,7 +80,8 @@ class Editor(QWidget):
         footer=QHBoxLayout();self.note=window.label(self.t('草稿自动保存；不会修改原视频。','Draft saves automatically; source videos stay unchanged.'),'muted',True);footer.addWidget(self.note,1);self.cancel_button=self.button('取消处理','Cancel processing',self.cancel.set);self.cancel_button.hide();footer.addWidget(self.cancel_button);v.addLayout(footer)
         self.refresh()
     def button(self,zh,en,fn,style=''):return self.window.button(self.t(zh,en),fn,style)
-    def save(self):E.atomic_json(self.project,dict(clips=self.clips,cues=self.cues))
+    def save(self):
+        if self.project is not None:E.atomic_json(self.project,dict(clips=self.clips,cues=self.cues))
     def snapshot(self):
         self.undo.append(copy.deepcopy((self.clips,self.cues)));self.undo=self.undo[-30:]
     def changed(self):

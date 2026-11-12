@@ -126,6 +126,26 @@ class ModernTests(unittest.TestCase):
     def test_editor_draft_survives_language_and_undo(self):
         editor=self.w.editor;editor.clips=[dict(id='a',path='example.mp4',duration=8.,start=0.,end=8.)];editor.selected=0;editor.refresh();editor.cursor=3.;editor.split();self.assertEqual(len(editor.clips),2);editor.undo_change();self.assertEqual(len(editor.clips),1);editor.save()
         self.w.toggle_language();self.assertEqual(len(self.w.editor.clips),1);self.assertEqual(self.w.editor.clips[0]['end'],8.)
+    def test_enhance_first_use_cancel_preserves_draft(self):
+        from unittest.mock import patch
+        self.w.prompt.setPlainText('一个人走进庭院')
+        with patch.object(self.w,'configure_enhancer',return_value=None) as configure,patch.object(self.w,'start_worker') as worker:
+            self.w.enhance_prompt();configure.assert_called_once();worker.assert_not_called()
+        self.assertEqual(self.w.prompt.toPlainText(),'一个人走进庭院')
+    def test_enhancement_apply_can_be_undone(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+        self.w.prompt.setPlainText('Original story')
+        with patch('modern_app.EnhancementReview') as review:
+            review.return_value.exec.return_value=QDialog.DialogCode.Accepted;review.return_value.result_text='Enhanced story'
+            self.w.review_enhancement(dict(draft='Original story',result='Enhanced story'))
+        self.assertEqual(self.w.prompt.toPlainText(),'Enhanced story');self.w.prompt.undo();self.assertEqual(self.w.prompt.toPlainText(),'Original story')
+        self.assertEqual(len(list((Path(self.tmp.name)/'prompt_history').glob('*.json'))),1)
+    def test_changing_output_preserves_old_tasks_and_remembers_roots(self):
+        c=E.defaults();c['prompt']='old';old=E.job_create(self.w.output,c);self.w.refresh_history();self.assertIn(old['id'],self.w.jobs)
+        new=Path(self.tmp.name)/'new-output';new.mkdir();self.w.set_output(new);self.assertIn(old['id'],self.w.jobs)
+        fresh=E.job_create(new,c);self.w.refresh_history();self.assertIn(fresh['id'],self.w.jobs)
+        other=Window(self.tmp.name);self.assertIn(old['id'],other.jobs);self.assertIn(fresh['id'],other.jobs);other.close();other.deleteLater()
     def test_round_corners_are_applied(self):self.assertIn('border-radius:12px',self.w.styleSheet())
 
 if __name__=='__main__':unittest.main(verbosity=2)

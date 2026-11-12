@@ -28,3 +28,5 @@ editing_project.json
 speech_components/
 reference_frames/
 *.bin
+enhancer_settings.json
+prompt_history/

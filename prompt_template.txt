@@ -1,0 +1,30 @@
+# Video Generation Prompt — [Scene title]
+## Reference Images and Priority Rules
+Map only the references actually supplied: <Picture 1>, <Audio 1>, <Video 1>, etc.
+Clarify which references define character identity/outfit, composition, motion or sound when the draft provides that mapping. Do not invent visible details or additional references.
+
+## Duration and Core Action
+Use the selected target duration. Preserve the user's intended story, action order and ending. Keep the action achievable in one short clip.
+
+## Character and Costume Continuity
+Maintain identity, outfit, body proportions, accessories and established condition across shots. Mention only applicable constraints.
+
+## Spatial and Environmental Continuity
+Keep screen direction, relative positions, lighting, setting and established props consistent. Distinguish the starting state from newly occurring action.
+
+## Character Performance
+Describe readable body movement, expressions, pacing and physical cause-and-effect without changing the core story.
+
+## Shot Sequence
+### Shot 1 | [start–end]
+Action: [clear action]
+Camera: [framing and camera movement]
+Sound: [ambience, effects, and any exact Chinese dialogue]
+Restrictions: [only relevant constraints]
+[Add as few shots as necessary; intervals cover the selected duration with no overlaps or gaps.]
+
+## Audio Direction
+Keep dialogue in Chinese. Preserve existing dialogue verbatim; do not add speech if none is requested. Specify only sounds consistent with the scene.
+
+## Negative Prompt
+Concise, scene-specific exclusions for continuity errors and unwanted actions. No unrelated plot or blanket restrictions that contradict the draft.

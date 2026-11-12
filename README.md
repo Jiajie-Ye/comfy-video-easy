@@ -61,7 +61,23 @@ Use **Last frame** in the image reference card, then choose **Choose a local fil
 
 You can add up to 9 images, 3 audio clips, and 3 videos. Reference videos must still be 2–15 seconds long. Output duration is aligned to the model's `17k+5` frame grid at 24 fps and may be slightly longer than requested. Durations of 1–4 seconds are below the model's documented usual training range; generation quality at those durations has not been validated. Refinement rebuilds the first- and second-pass API graph rather than loading an internal latent cache from a previous task.
 
-Settings, task records, and media paths are saved in the `我的视频数据` folder beside the application. Use `--data-dir` to choose another location. Keep this folder when upgrading. It can contain private prompts, server addresses, and media paths and should not be committed to a public repository.
+Settings, task records and media paths are kept in the persistent workspace described below. Keep this folder when upgrading. It can contain private prompts, server addresses, and media paths and should not be committed to a public repository.
+
+## Script prompt enhancement
+
+Choose **Enhance prompt** below the story box. First use opens settings for the API type, URL, API key and exact model name. Later clicks reuse that configuration. Supported request adapters: OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic Messages, Gemini generateContent, and Amazon Bedrock Converse with a Bedrock bearer API key (not AWS access-key signing).
+
+The **Reference format** tab accepts pasted text or imported TXT/Markdown. The bundled neutral format covers references, continuity, duration, shots, sound and negative constraints without importing an example's story. Only the draft, reference format, duration and media counts are sent to your configured endpoint; media files and local paths are not sent. Review and edit the result before applying it. Ctrl+Z restores the previous prompt; originals/results also stay in local `prompt_history`.
+
+API keys are encrypted with Windows DPAPI for the current account. They are not included in task manifests or logs; moving settings to another PC/account requires entering the key again. Compatibility Chat endpoints manage their own output cap; other adapters expose a maximum-output setting. Provider/model support varies. Protocol tests use fixtures; real-provider validation requires your own configuration.
+
+## Persistent workspace and old tasks
+
+Versions now share a per-user workspace locator in `%LOCALAPPDATA%/ComfyVideoEasy/workspace.json`. A fresh install defaults to `~/Documents/AI视频助手工作区`; an existing portable data folder beside the EXE is adopted when no locator exists. `--data-dir` is an explicit temporary/advanced override and does not change the locator.
+
+In Settings, choose a persistent workspace and a separate video output folder, or restore the workspace's default `视频作品` output. Changing output folders retains old task roots, so previous videos remain in My tasks. **Import old tasks** accepts an old app, data or video-output folder containing task manifests. Copied task folders can resolve downloaded files next to their manifests.
+
+Changing workspace copies settings, drafts and support files without overwriting existing destination configuration. Existing videos remain in their previous folders and stay linked in history: do not delete those folders. Keep the workspace across upgrades; only replace the executable. Settings, prompts, protected credentials and media remain private and are excluded from Git.
 
 ## Simple video editor
 
@@ -87,7 +103,7 @@ The directory must contain `ffmpeg.exe`, `ffprobe.exe`, and their required DLLs.
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_modern test_engine test_editing -v
+python -m unittest test_modern test_engine test_editing test_enhancer test_workspaces -v
 ```
 
 Offline tests use a minimal node fixture with private server enumerations removed. They do not establish compatibility with every live-server version and do not submit GPU jobs.

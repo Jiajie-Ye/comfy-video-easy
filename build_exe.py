@@ -9,6 +9,7 @@ if not (FFMPEG/'ffmpeg.exe').is_file():raise SystemExit('请设置 CVE_FFMPEG_DI
 args=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onefile','--windowed','--name','AI视频助手',
       '--distpath',str(ROOT/'dist'),'--workpath',str(ROOT/'build'),'--specpath',str(ROOT/'build'),
       '--add-data',str(ROOT/'profile.json')+os.pathsep+'.',
+      '--add-data',str(ROOT/'prompt_template.txt')+os.pathsep+'.',
       '--add-data',str(ROOT/'check.svg')+os.pathsep+'.',
       '--add-data',str(ROOT/'arrow_up.svg')+os.pathsep+'.',
       '--add-data',str(ROOT/'arrow_down.svg')+os.pathsep+'.',
