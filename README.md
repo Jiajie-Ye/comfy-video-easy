@@ -63,6 +63,16 @@ You can add up to 9 images, 3 audio clips, and 3 videos. Reference videos must s
 
 Settings, task records, and media paths are saved in the `我的视频数据` folder beside the application. Use `--data-dir` to choose another location. Keep this folder when upgrading. It can contain private prompts, server addresses, and media paths and should not be committed to a public repository.
 
+## Simple video editor
+
+Open **Video editor** in the sidebar. Add multiple completed task videos or local files. Click the timeline to select a clip and position the playhead; drag clips left or right to reorder them. Set In/Out points and apply the trim, or split at the playhead. Remove unwanted parts and use Undo when needed. The draft saves automatically in `editing_project.json` under your data folder. Original videos are never modified.
+
+Preview plays the trimmed sequence. Export MP4 at 720p/1080p in landscape or portrait; differing aspect ratios are fitted with padding. Export normalizes to 30 fps, H.264 video and AAC audio, adding silence for clips without audio. Processing can be cancelled; an existing output is only replaced after successful completion.
+
+**Auto captions** runs locally with the optional Whisper.cpp v1.8.2 CPU component and multilingual base model. First use offers a roughly 160 MB download from official GitHub/Hugging Face sources, verified with SHA-256. After setup, media stays local. Recognition can be inaccurate: review the text in Edit captions. You can also import SRT or enter captions manually. Export can burn captions into the picture or include a selectable subtitle track. Trimming, splitting or reordering clears existing captions to prevent stale timing; generate captions after arranging your clips.
+
+This is a single-track editor, not a full replacement for a professional NLE: no layered tracks, transitions or complex audio mixing. The Windows multimedia backend handles preview; unsupported source codecs may require conversion. **My tasks** now refreshes the paused preview automatically when the task or result file changes.
+
 ## Build a Windows EXE
 
 ```powershell
@@ -77,7 +87,7 @@ The directory must contain `ffmpeg.exe`, `ffprobe.exe`, and their required DLLs.
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_modern test_engine -v
+python -m unittest test_modern test_engine test_editing -v
 ```
 
 Offline tests use a minimal node fixture with private server enumerations removed. They do not establish compatibility with every live-server version and do not submit GPU jobs.

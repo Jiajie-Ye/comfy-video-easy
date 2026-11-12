@@ -11,3 +11,5 @@ No third-party binaries or model weights are committed in this repository.
 - FFmpeg / FFprobe: license depends on the chosen build and enabled components — https://ffmpeg.org/legal.html
 
 Builds that bundle FFmpeg, Qt or other dependencies must preserve notices and meet the corresponding source-distribution and other applicable license requirements. The application GPL license does not relicense model weights, custom nodes, media inputs or generated content.
+
+Optional speech recognition is downloaded separately on request: [Whisper.cpp v1.8.2](https://github.com/ggml-org/whisper.cpp/tree/v1.8.2), MIT license, and the [Whisper multilingual base model](https://huggingface.co/ggerganov/whisper.cpp), distributed under its own model/license terms. Downloads are pinned by SHA-256 in edit_engine.py. These files are not committed or bundled in the application ZIP.

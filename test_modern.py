@@ -71,6 +71,7 @@ class ModernTests(unittest.TestCase):
         from unittest.mock import patch
         from PyQt6.QtCore import QUrl
         path=Path(self.tmp.name)/'sample.mp4';path.write_bytes(b'placeholder')
+        c=E.defaults();c['prompt']='Test';job=E.job_create(self.w.output,c);job.update(status='已完成',files=[str(path)]);E.save_job(job);self.w.selected_id=job['id'];self.w.refresh_history()
         with patch.object(self.w,'chosen_file',return_value=str(path)),patch.object(self.w,'open_path') as external,patch.object(self.w.player,'play'):
             self.w.play();external.assert_not_called();self.assertEqual(self.w.player.source(),QUrl.fromLocalFile(str(path.resolve())))
         self.w.player.pause();source=self.w.player.source();self.w.toggle_language();self.assertEqual(self.w.player.source(),source)
@@ -114,6 +115,17 @@ class ModernTests(unittest.TestCase):
         w=self.w;w.prompt.setPlainText('Keep my prompt');w.controls['server'].setText('http://localhost:8188');w.controls['sampler'].setCurrentIndex(2);w.controls['steps'].setText('31')
         w.pickers['images'].paths=['example.png'];w.reset_parameters();w.capture()
         self.assertEqual(w.config['sampler'],'euler');self.assertEqual(int(w.config['steps']),8);self.assertEqual(w.config['prompt'],'Keep my prompt');self.assertEqual(w.config['images'],['example.png']);self.assertEqual(w.config['server'],'http://localhost:8188')
+    def test_task_selection_switches_preview_without_play(self):
+        from PyQt6.QtCore import QUrl
+        jobs=[]
+        for name in ['first','second']:
+            path=Path(self.tmp.name)/(name+'.mp4');path.write_bytes(b'placeholder');c=E.defaults();c['prompt']=name;j=E.job_create(self.w.output,c);j.update(status='已完成',files=[str(path)]);E.save_job(j);jobs.append((j,path))
+        for j,path in jobs:
+            self.w.selected_id=j['id'];self.w.refresh_history();self.assertEqual(self.w.player.source(),QUrl.fromLocalFile(str(path.resolve())))
+        jobs[1][0]['files']=[];E.save_job(jobs[1][0]);self.w.refresh_history();self.assertTrue(self.w.player.source().isEmpty())
+    def test_editor_draft_survives_language_and_undo(self):
+        editor=self.w.editor;editor.clips=[dict(id='a',path='example.mp4',duration=8.,start=0.,end=8.)];editor.selected=0;editor.refresh();editor.cursor=3.;editor.split();self.assertEqual(len(editor.clips),2);editor.undo_change();self.assertEqual(len(editor.clips),1);editor.save()
+        self.w.toggle_language();self.assertEqual(len(self.w.editor.clips),1);self.assertEqual(self.w.editor.clips[0]['end'],8.)
     def test_round_corners_are_applied(self):self.assertIn('border-radius:12px',self.w.styleSheet())
 
 if __name__=='__main__':unittest.main(verbosity=2)

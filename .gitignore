@@ -24,3 +24,7 @@ workflow_source.json
 *.mp4
 *.wav
 *.mp3
+editing_project.json
+speech_components/
+reference_frames/
+*.bin

@@ -12,8 +12,9 @@ if sys.platform=='win32':os.environ.setdefault('QT_MEDIA_BACKEND','windows')
 from PyQt6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 import engine as E
+from editor_ui import Editor
 
-VERSION='0.3.4'
+VERSION='0.4.0'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -40,7 +41,7 @@ QPushButton#quiet:hover {background:#eaf2ff;color:#252525;}
 QPushButton#language {background:#edf4ff;border:1px solid #d4e3f9;border-radius:16px;padding:6px 14px;}
 QFrame#card {background:#ffffff;border:1px solid #dce7f6;border-radius:14px;}
 QFrame#card QLabel,QFrame#card QCheckBox {background:transparent;}
-QTextEdit,QLineEdit,QComboBox,QSpinBox {background:#ffffff;border:1px solid #dce5f2;border-radius:10px;padding:10px;selection-background-color:#dceaff;selection-color:#252525;}
+QTextEdit,QLineEdit,QComboBox,QSpinBox,QDoubleSpinBox {background:#ffffff;border:1px solid #dce5f2;border-radius:10px;padding:10px;selection-background-color:#dceaff;selection-color:#252525;}
 QTextEdit {padding:16px;border-radius:14px;font-size:15px;}
 QTextEdit:focus,QLineEdit:focus,QComboBox:focus,QSpinBox:focus {border-color:#6a9ee9;background:#ffffff;}
 QComboBox {padding-right:30px;min-height:22px;}
@@ -76,7 +77,7 @@ QPushButton#accent {background:#e8f1ff;color:#245eab;border:1px solid #bcd3f5;bo
 QPushButton#accent:hover {background:#d8e8ff;border-color:#90b6ec;}
 QPushButton#accent:disabled {background:#f2f5fa;color:#97a7bb;border-color:#e0e7f1;}
 '''
-NAMES=[('制作视频','Create video'),('我的任务','My tasks'),('末帧工具','Last frame'),('高级设置','Settings'),('使用指南','Guide')]
+NAMES=[('制作视频','Create video'),('我的任务','My tasks'),('末帧工具','Last frame'),('高级设置','Settings'),('使用指南','Guide'),('视频剪辑','Video editor')]
 RATIO_EN={'横屏 16:9':'Landscape 16:9','竖屏 9:16':'Portrait 9:16','方形 1:1':'Square 1:1','竖图 2:3':'Portrait 2:3'}
 STATUS={
  '准备中':'Preparing','提交中':'Submitting','已提交':'Submitted','已完成':'Completed','生成失败':'Failed',
@@ -165,6 +166,8 @@ class Window(QMainWindow):
         if self.lang not in ('zh','en'):self.lang='zh'
         self.bridge=Bridge();self.bridge.event.connect(self.on_event)
         self.player=QMediaPlayer(self);self.audio=QAudioOutput(self);self.audio.setVolume(.7);self.player.setAudioOutput(self.audio)
+        self.task_preview_pending=False
+        self.video_preview_mute=False
         self.player.positionChanged.connect(self.update_playback);self.player.durationChanged.connect(self.update_playback);self.player.playbackStateChanged.connect(self.update_playback);self.player.errorOccurred.connect(self.playback_error)
         area=self.screen().availableGeometry();width=min(1220,area.width()-40);height=min(740,area.height()-80)
         self.setMinimumSize(min(960,width),min(560,height));self.resize(width,height);self.move(area.x()+20,area.y()+20)
@@ -189,6 +192,9 @@ class Window(QMainWindow):
             self.qt_translator.load('qtbase_zh_CN',QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath));app.installTranslator(self.qt_translator)
         self.setWindowTitle(self.t('AI 视频助手','AI Video Assistant')+' '+VERSION)
         self.setStyleSheet(STYLE.replace('__CHECK__',str(E.resource('check.svg')).replace('\\','/')).replace('__UP__',E.resource('arrow_up.svg').as_posix()).replace('__DOWN__',E.resource('arrow_down.svg').as_posix()))
+        if hasattr(self,'editor'):
+            if self.editor.busy:return
+            self.editor.pause();self.editor.save()
         old=self.takeCentralWidget()
         if old:old.deleteLater()
         root=QWidget();self.setCentralWidget(root);outer=QHBoxLayout(root);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
@@ -205,7 +211,7 @@ class Window(QMainWindow):
         top=QHBoxLayout();self.title=self.label('','title');top.addWidget(self.title);top.addStretch();self.language=self.button('EN  /  中文',self.toggle_language,'language');self.language.setToolTip(self.t('切换到英文 · Alt+L','Switch to Chinese · Alt+L'));top.addWidget(self.language);c.addLayout(top)
         self.subtitle=self.label('','muted',True);c.addWidget(self.subtitle)
         self.stack=QStackedWidget();c.addWidget(self.stack,1);self.controls={};self.pickers={}
-        for builder in [self.create_page,self.history_page,self.tools_page,self.settings_page,self.guide_page]:
+        for builder in [self.create_page,self.history_page,self.tools_page,self.settings_page,self.guide_page,self.editor_page]:
             page=QWidget();layout=QVBoxLayout(page);layout.setContentsMargins(0,4,8,8);layout.setSpacing(18);builder(layout);layout.addStretch()
             scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setWidget(page);self.stack.addWidget(scroll)
         self.progress=QProgressBar();self.progress.setTextVisible(False);self.progress.setRange(0,0);c.addWidget(self.progress)
@@ -214,10 +220,25 @@ class Window(QMainWindow):
     def navigate(self,i):
         self.page=i
         if i!=1:self.player.pause()
+        if hasattr(self,'editor') and i!=5:self.editor.pause()
+        if hasattr(self,'run'):self.run.setVisible(i!=5)
         self.stack.setCurrentIndex(i);self.title.setText(self.t(*NAMES[i]))
-        subtitles=[('把想法写下来，让画面开始发生。','Describe your idea. Bring it to life.'),('每一次创作，都有迹可循。','Your generations, settings and results in one place.'),('将视频的最后一帧，留给下一个镜头。','Keep the final frame for your next shot.'),('按你的创作习惯，调整每一处细节。','Fine-tune your generation preferences.'),('从第一段视频开始。','Start with your first video.')]
+        subtitles=[('把想法写下来，让画面开始发生。','Describe your idea. Bring it to life.'),('每一次创作，都有迹可循。','Your generations, settings and results in one place.'),('将视频的最后一帧，留给下一个镜头。','Keep the final frame for your next shot.'),('按你的创作习惯，调整每一处细节。','Fine-tune your generation preferences.'),('从第一段视频开始。','Start with your first video.'),('把镜头拼成故事，裁剪、排序并导出。','Trim, arrange and export your story.')]
         self.subtitle.setText(self.t(*subtitles[i]))
         for n,b in enumerate(self.nav):b.setChecked(n==i)
+    def editor_page(self,v):
+        self.editor=Editor(self);v.addWidget(self.editor)
+    def task_preview_frame(self,frame):
+        if self.task_preview_pending and frame.isValid():
+            self.task_preview_pending=False;self.player.pause();self.audio.setMuted(False)
+    def preview_selected_file(self):
+        item=self.files.currentItem();path=item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not path or not Path(path).is_file():
+            self.task_preview_pending=False;self.player.stop();self.player.setSource(QUrl());self.audio.setMuted(False)
+            self.media_note.setText(self.t('暂无可预览的视频，等待生成或下载完成。','No video to preview. Wait for generation or download.'));return
+        url=QUrl.fromLocalFile(str(Path(path).resolve()))
+        if self.player.source()==url:return
+        self.player.stop();self.media_note.setText(Path(path).name);self.task_preview_pending=True;self.audio.setMuted(True);self.player.setSource(url);self.player.play()
     def combo(self,key,options):
         w=ClickOnlyComboBox()
         for value,label in options:w.addItem(label,value)
@@ -247,7 +268,7 @@ class Window(QMainWindow):
         p=QFileDialog.getExistingDirectory(self,self.t('选择保存文件夹','Choose output folder'),self.output_edit.text())
         if p:self.output_edit.setText(p);self.output=p;self.refresh_history()
     def reset_parameters(self):
-        if self.busy:return
+        if self.busy or self.editor.busy:return
         self.capture()
         self.config.update({key:value for key,value in E.defaults().items() if key not in ('server','prompt','images','audios','videos')})
         self.build();self.save_preferences();self.raw_status=None;self.status_pair=('生成参数已恢复默认。','Generation parameters restored to defaults.');self.update_status()
@@ -278,10 +299,10 @@ class Window(QMainWindow):
         h.addStretch();self.play_button=self.button(self.t('播放视频','Play video'),self.play);self.frame_button=self.button(self.t('提取末帧','Extract last frame'),self.extract_result);h.addWidget(self.play_button);h.addWidget(self.frame_button);v.addLayout(h)
         lower=QHBoxLayout();left=QVBoxLayout();lower.addLayout(left,4)
         self.details=self.label(self.t('选择一条任务，查看参数与结果。','Select a task to see its settings and results.'),'muted',True);self.details.setMaximumHeight(110);self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);left.addWidget(self.details)
-        self.files=QListWidget();self.files.setMinimumHeight(100);self.files.itemDoubleClicked.connect(lambda _:self.play());left.addWidget(self.files,1)
+        self.files=QListWidget();self.files.setMinimumHeight(100);self.files.itemDoubleClicked.connect(lambda _:self.play());self.files.currentItemChanged.connect(lambda *_:self.preview_selected_file());left.addWidget(self.files,1)
         self.preview_panel=QFrame();self.preview_panel.setObjectName('card');panel=QVBoxLayout(self.preview_panel);panel.setContentsMargins(12,10,12,10)
         heading=QHBoxLayout();heading.addWidget(self.label(self.t('视频预览','Video preview'),'section'));heading.addStretch();heading.addWidget(self.button(self.t('系统播放器 ↗','System player ↗'),self.play_external,'quiet'));panel.addLayout(heading)
-        self.video_widget=QVideoWidget();self.video_widget.setMinimumSize(240,120);self.video_widget.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Expanding);self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio);panel.addWidget(self.video_widget,1);self.player.setVideoOutput(self.video_widget)
+        self.video_widget=QVideoWidget();self.video_widget.setMinimumSize(240,120);self.video_widget.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Expanding);self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio);self.video_widget.videoSink().videoFrameChanged.connect(self.task_preview_frame);panel.addWidget(self.video_widget,1);self.player.setVideoOutput(self.video_widget)
         self.media_note=self.label(Path(self.player.source().toLocalFile()).name if not self.player.source().isEmpty() else self.t('选择结果后点击“播放视频”','Select a result and choose Play video'),'muted',True);panel.addWidget(self.media_note)
         controls=QHBoxLayout();self.pause_button=self.button(self.t('播放','Play'),self.toggle_playback,'quiet');controls.addWidget(self.pause_button)
         self.seek=QSlider(Qt.Orientation.Horizontal);self.seek.setRange(0,self.player.duration());self.seek.sliderMoved.connect(self.player.setPosition);controls.addWidget(self.seek,1);self.media_time=self.label('00:00 / 00:00','muted');controls.addWidget(self.media_time);panel.addLayout(controls)
@@ -321,8 +342,9 @@ class Window(QMainWindow):
             return None
         return self.jobs.get(self.table.item(selected[0].row(),0).data(Qt.ItemDataRole.UserRole))
     def select_job(self):
-        j=self.selected_job(False);self.files.clear()
-        if not j:return
+        j=self.selected_job(False);self.files.blockSignals(True);self.files.clear()
+        if not j:
+            self.files.blockSignals(False);self.preview_selected_file();return
         self.selected_id=j['id'];c=j['settings']
         self.details.setText(self.t(f"一采种子 {c['seed']}    二采种子 {c['second_seed']}\n{c['seconds']} 秒 · {c['megapixels']} MP\n{c['prompt']}",f"First-pass seed {c['seed']}    Second-pass seed {c['second_seed']}\n{c['seconds']} seconds · {c['megapixels']} MP\n{c['prompt']}"))
         for f in j.get('files',[]):
@@ -330,11 +352,13 @@ class Window(QMainWindow):
             if self.lang=='en':name=name.replace('一采_','First pass — ').replace('二采_','Second pass — ')
             item=QListWidgetItem(name);item.setData(Qt.ItemDataRole.UserRole,f);self.files.addItem(item)
         if self.files.count():self.files.setCurrentRow(self.files.count()-1)
+        self.files.blockSignals(False);self.preview_selected_file()
     def chosen_file(self):
         item=self.files.currentItem()
         if not item:self.info(self.t('请选择一个已下载的视频。','Choose a downloaded video first.'));return None
         return item.data(Qt.ItemDataRole.UserRole)
     def play(self):
+        self.task_preview_pending=False;self.audio.setMuted(False)
         p=self.chosen_file()
         if p:
             if not Path(p).is_file():self.info(self.t('视频文件不存在，请重新下载。','Video file is missing. Download it again.'));return
@@ -344,7 +368,7 @@ class Window(QMainWindow):
         j=self.selected_job()
         if j:self.open_path(j['folder'])
     def load_job(self):
-        if self.busy:return
+        if self.busy or self.editor.busy:return
         j=self.selected_job()
         if j:
             self.capture();self.config=copy.deepcopy(j['settings']);self.config['fixed']=True;self.config['second_fixed']=True;self.page=0;self.build()
@@ -483,6 +507,7 @@ class Window(QMainWindow):
     def save_preferences(self):
         self.capture();E.atomic_json(self.data/'settings.json',{'config':self.config,'output':self.output,'language':self.lang})
     def toggle_language(self):
+        if hasattr(self,'editor') and self.editor.busy:return
         self.capture();self.lang='en' if self.lang=='zh' else 'zh';self.build();self.save_preferences()
     def translate_status(self,value):
         if self.lang=='zh':return value
@@ -496,6 +521,7 @@ class Window(QMainWindow):
     def emit(self,name,value):self.bridge.event.emit(name,value)
     def sync_busy(self):
         self.reset_button.setEnabled(not self.busy);self.reference_frame_button.setEnabled(not self.busy);self.run.setEnabled(not self.busy);self.check.setEnabled(not self.busy);self.extract_button.setEnabled(not self.busy);self.progress.setVisible(self.busy)
+        self.language.setEnabled(not (hasattr(self,'editor') and self.editor.busy))
         self.run.setText(self.t('处理中…','Working…') if self.busy else self.t('开始生成  ↗','Generate video  ↗'))
     def start_worker(self,fn):
         if self.busy:return
@@ -568,10 +594,12 @@ class Window(QMainWindow):
         if not p.exists():self.info(self.t('文件不存在，请检查保存位置。','File not found. Check its saved location.'));return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(p.resolve())))
     def closeEvent(self,event):
+        if hasattr(self,'editor') and self.editor.busy:
+            self.info(self.t('剪辑正在处理，请先点击取消处理或等待完成。','The editor is working. Cancel processing or wait for completion.'));event.ignore();return
         if self.busy and not self.confirm(self.t('服务器任务可能继续运行。关闭窗口会中断本机上传或下载，之后可从任务记录继续查询。现在关闭？','Server tasks may keep running. Local uploads or downloads will stop. You can resume from My tasks later. Close now?')):event.ignore();return
         try:self.save_preferences()
         except OSError:pass
-        self.player.stop();self.stop.set();event.accept()
+        self.player.stop();self.editor.pause();self.editor.save();self.stop.set();event.accept()
 
 def self_test(folder,check_server=False):
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True);report={'version':VERSION,'checks':[]}
@@ -583,7 +611,11 @@ def self_test(folder,check_server=False):
         frames=[];w.video_widget.videoSink().videoFrameChanged.connect(lambda frame:frames.append(frame.isValid()))
         w.player.setSource(QUrl.fromLocalFile(str(video.resolve())));w.player.play();deadline=time.monotonic()+10
         while not any(frames) and time.monotonic()<deadline:app.processEvents();time.sleep(.02)
-        assert any(frames),w.player.errorString() or 'No decoded video frame';report['checks'].append('embedded_video_decode');w.close()
+        assert any(frames),w.player.errorString() or 'No decoded video frame';report['checks'].append('embedded_video_decode')
+        import edit_engine as X
+        clip=X.new_clip(video);clip['end']=.5
+        edited=folder/'edited.mp4';X.export_video([clip,clip],edited,(64,64),[dict(start=.1,end=.4,text='Test')],True)
+        assert abs(float(E.inspect_video(edited)['format']['duration'])-1)<.2;report['checks'].append('trim_concat_subtitle_export');w.close()
         if check_server:report['server']=E.Client().json('/system_stats')['system']['comfyui_version']
         report['passed']=True
     except Exception:report['passed']=False;report['error']=traceback.format_exc()
