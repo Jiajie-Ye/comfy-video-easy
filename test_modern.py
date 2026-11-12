@@ -76,6 +76,20 @@ class ModernTests(unittest.TestCase):
         self.w.player.pause();source=self.w.player.source();self.w.toggle_language();self.assertEqual(self.w.player.source(),source)
         with patch.object(self.w,'open_path') as external:
             self.w.play_external();external.assert_called_once();self.assertEqual(Path(external.call_args.args[0]),path.resolve())
+    def test_reference_frame_adds_thumbnail_and_persists_across_language(self):
+        from PyQt6.QtGui import QImage,QColor
+        p=Path(self.tmp.name)/'frame.png';im=QImage(80,60,QImage.Format.Format_RGB32);im.fill(QColor('blue'));im.save(str(p))
+        self.w.on_event('reference_frame',str(p));picker=self.w.pickers['images']
+        self.assertEqual(picker.paths,[str(p)]);self.assertFalse(picker.list.item(0).icon().isNull())
+        self.w.toggle_language();self.assertEqual(self.w.pickers['images'].paths,[str(p)])
+        self.assertEqual(json.loads((Path(self.tmp.name)/'settings.json').read_text('utf-8'))['config']['images'],[str(p)])
+    def test_reference_frame_cancel_and_full_list_do_not_start_worker(self):
+        from unittest.mock import patch
+        with patch('modern_app.QFileDialog.getOpenFileName',return_value=('', '')),patch.object(self.w,'start_worker') as worker:
+            self.w.extract_reference();worker.assert_not_called()
+        self.w.pickers['images'].paths=['example.png']*9
+        with patch.object(self.w,'info'),patch('modern_app.QFileDialog.getOpenFileName') as dialog:
+            self.w.extract_reference();dialog.assert_not_called()
     def test_round_corners_are_applied(self):self.assertIn('border-radius:12px',self.w.styleSheet())
 
 if __name__=='__main__':unittest.main(verbosity=2)

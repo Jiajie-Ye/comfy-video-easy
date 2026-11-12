@@ -13,7 +13,7 @@ from PyQt6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 import engine as E
 
-VERSION='0.3.0'
+VERSION='0.3.1'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -90,6 +90,8 @@ class Picker(QFrame):
         super().__init__();self.setObjectName('card');self.app=app;self.key=key;self.tag=tag;self.limit=limit;self.pattern=pattern
         self.paths=list(app.config[key]);v=QVBoxLayout(self);v.setContentsMargins(16,12,16,10);v.setSpacing(5)
         h=QHBoxLayout();h.addWidget(app.label(app.t(zh,en),'section'));h.addStretch();h.addWidget(app.button(app.t('+ 添加','+ Add'),self.add,'quiet'));v.addLayout(h)
+        if key=='images':
+            app.reference_frame_button=app.button(app.t('从视频提取末帧','Last frame from video'),app.extract_reference,'quiet');v.addWidget(app.reference_frame_button)
         self.empty=app.label(app.t('未选择文件，点击添加','No files yet. Choose Add.'),'muted');v.addWidget(self.empty)
         self.list=QListWidget();self.list.setMaximumHeight(76);self.list.setMinimumHeight(42);self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.list.itemDoubleClicked.connect(self.preview);v.addWidget(self.list)
         if key=='images':
@@ -361,6 +363,25 @@ class Window(QMainWindow):
     def extract_result(self):
         p=self.chosen_file()
         if p:self.video_edit.setText(p);self.dir_edit.setText(str(Path(p).parent));self.navigate(2);self.extract()
+    def extract_reference(self):
+        if self.busy:return
+        picker=self.pickers['images']
+        if len(picker.paths)>=picker.limit:
+            self.info(self.t('参考图片已满 9 张，请先移除一张。','You already have 9 reference images. Remove one first.'));return
+        video,_=QFileDialog.getOpenFileName(self,self.t('选择视频，提取末帧并添加为参考图片','Choose a video to extract and add its last frame'),'',self.t('视频文件','Video files')+' (*.mp4 *.mov *.mkv *.avi *.webm *.m4v)')
+        if not video:return
+        folder=self.data/'reference_frames'
+        def work():
+            self.emit('pair',('正在提取末帧并添加参考图片…','Extracting a last frame for your references…'))
+            self.emit('reference_frame',str(E.extract_last_frame(video,folder).resolve()))
+        self.start_worker(work)
+    def add_reference_frame(self,path):
+        picker=self.pickers['images']
+        if len(picker.paths)>=picker.limit:
+            self.raw_status=None;self.status_pair=('末帧已保存，但图片已满；请移除一张后从“添加”选择。','Frame saved, but references are full. Remove an image and use Add.');self.info(self.t('末帧已保存到：','Frame saved to: ')+path);return
+        if path not in picker.paths:picker.paths.append(path)
+        picker.refresh();picker.list.setCurrentRow(picker.paths.index(path));self.save_preferences()
+        self.raw_status=None;self.status_pair=(f'末帧已加入参考图片 <Picture {picker.paths.index(path)+1}>。',f'Last frame added as <Picture {picker.paths.index(path)+1}>.')
     def extract(self):
         if self.busy:return
         self.capture();video=Path(self.tool_video)
@@ -404,7 +425,7 @@ class Window(QMainWindow):
     def update_status(self):self.status.setText(self.translate_status(self.raw_status) if self.raw_status is not None else self.t(*self.status_pair))
     def emit(self,name,value):self.bridge.event.emit(name,value)
     def sync_busy(self):
-        self.run.setEnabled(not self.busy);self.check.setEnabled(not self.busy);self.extract_button.setEnabled(not self.busy);self.progress.setVisible(self.busy)
+        self.reference_frame_button.setEnabled(not self.busy);self.run.setEnabled(not self.busy);self.check.setEnabled(not self.busy);self.extract_button.setEnabled(not self.busy);self.progress.setVisible(self.busy)
         self.run.setText(self.t('处理中…','Working…') if self.busy else self.t('开始生成  ↗','Generate video  ↗'))
     def start_worker(self,fn):
         if self.busy:return
@@ -423,6 +444,7 @@ class Window(QMainWindow):
         elif name=='pair':self.raw_status=None;self.status_pair=value
         elif name=='connected':self.connected=True;self.connection.setText(self.t('● 已连接','● Connected'))
         elif name=='refresh':self.refresh_history()
+        elif name=='reference_frame':self.add_reference_frame(value)
         elif name=='frame':self.tool_result=value;self.frame_label.setText(value);self.raw_status=None;self.status_pair=('末帧已保存，可以打开图片了。','Last frame saved. Your image is ready.')
         elif name=='completed':self.selected_id=value['id'];self.refresh_history();self.raw_status=None;self.status_pair=('视频已保存，可以播放或继续强化。','Video saved. Play it or refine it further.')
         elif name=='error':self.raw_status=None;self.status_pair=('处理未完成，记录已保留。','Needs attention. Your task record has been kept.');self.error(value)
