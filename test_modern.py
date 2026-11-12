@@ -132,6 +132,23 @@ class ModernTests(unittest.TestCase):
         with patch.object(self.w,'configure_enhancer',return_value=None) as configure,patch.object(self.w,'start_worker') as worker:
             self.w.enhance_prompt();configure.assert_called_once();worker.assert_not_called()
         self.assertEqual(self.w.prompt.toPlainText(),'一个人走进庭院')
+    def test_enhance_captures_current_duration(self):
+        from unittest.mock import patch
+        import prompt_enhancer as PE
+        cfg=PE.defaults();cfg.update(url='https://example.invalid/v1',model='test')
+        self.w.prompt.setPlainText('A person walks');self.w.controls['seconds'].setValue(7)
+        with patch('modern_app.PE.load_config',return_value=cfg),patch.object(self.w,'start_worker') as worker,patch('modern_app.PE.enhance',return_value='result') as enhance,patch.object(self.w,'emit') as emit:
+            self.w.enhance_prompt();self.w.controls['seconds'].setValue(12);worker.call_args.args[0]()
+            self.assertEqual(enhance.call_args.args[2]['seconds'],7)
+            self.assertEqual(emit.call_args.args[1]['seconds'],7)
+    def test_changed_duration_can_keep_original(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+        self.w.prompt.setPlainText('Original');self.w.controls['seconds'].setValue(12)
+        with patch('modern_app.EnhancementReview') as review,patch.object(self.w,'confirm',return_value=False) as confirm:
+            review.return_value.exec.return_value=QDialog.DialogCode.Accepted
+            self.w.review_enhancement(dict(draft='Original',result='Enhanced',seconds=7));confirm.assert_called_once()
+        self.assertEqual(self.w.prompt.toPlainText(),'Original')
     def test_enhancement_apply_can_be_undone(self):
         from unittest.mock import patch
         from PyQt6.QtWidgets import QDialog

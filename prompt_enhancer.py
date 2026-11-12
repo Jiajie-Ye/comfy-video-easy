@@ -70,18 +70,21 @@ def request_data(c,draft,context):
     validate(c)
     if not draft.strip():raise EnhancementError('Write a rough story first / 请先写下大概剧情')
     if len(draft)>30000:raise EnhancementError('Story too long (max 30,000 characters) / 剧情最多 3 万字符')
+    seconds=context.get('seconds')
+    if type(seconds) is not int or not 1<=seconds<=15:raise EnhancementError('Choose a duration from 1 to 15 seconds / 请设置 1–15 秒的生成时长')
+    system=SYSTEM+f'''\nAUTHORITATIVE TIMING: The current UI target is exactly {seconds} seconds. This overrides any duration or timestamps in the story or reference format. Never ask the user to supply a duration. Explicitly state Duration: {seconds} seconds in the result. Build a feasible shot schedule starting at 0 seconds and ending at exactly {seconds} seconds, with no gaps or overlaps. Adapt shot count and pacing to this budget; simplify secondary action rather than extending the clip. Preserve core action, action order and ending. Keep Chinese dialogue verbatim and allow realistic speaking time; if it cannot fit, flag that timing conflict in the Audio Direction instead of promising it fits or silently changing the duration. Check all shot boundaries before returning the prompt.'''
     # Only the following context fields leave the device; no paths, media or server settings.
     safe={k:context[k] for k in ('seconds','ratio','images','audios','videos') if k in context}
     user=json.dumps(dict(story=draft,video_context=safe,reference_format=c['template']),ensure_ascii=False)
     headers={'Content-Type':'application/json'};kind=c['kind'];key=c.get('api_key','');model=c['model'].strip();n=int(c['max_tokens'])
     if kind in ('chat','responses','bedrock') and key:headers['Authorization']='Bearer '+key
-    if kind=='chat':body=dict(model=model,messages=[dict(role='system',content=SYSTEM),dict(role='user',content=user)],stream=False)
-    elif kind=='responses':body=dict(model=model,instructions=SYSTEM,input=user,max_output_tokens=n,store=False)
+    if kind=='chat':body=dict(model=model,messages=[dict(role='system',content=system),dict(role='user',content=user)],stream=False)
+    elif kind=='responses':body=dict(model=model,instructions=system,input=user,max_output_tokens=n,store=False)
     elif kind=='anthropic':
-        headers.update({'x-api-key':key,'anthropic-version':'2023-06-01'});body=dict(model=model,system=SYSTEM,messages=[dict(role='user',content=user)],max_tokens=n)
+        headers.update({'x-api-key':key,'anthropic-version':'2023-06-01'});body=dict(model=model,system=system,messages=[dict(role='user',content=user)],max_tokens=n)
     elif kind=='gemini':
-        headers['x-goog-api-key']=key;body=dict(systemInstruction={'parts':[{'text':SYSTEM}]},contents=[{'role':'user','parts':[{'text':user}]}],generationConfig={'maxOutputTokens':n})
-    else:body=dict(system=[{'text':SYSTEM}],messages=[{'role':'user','content':[{'text':user}]}],inferenceConfig={'maxTokens':n})
+        headers['x-goog-api-key']=key;body=dict(systemInstruction={'parts':[{'text':system}]},contents=[{'role':'user','parts':[{'text':user}]}],generationConfig={'maxOutputTokens':n})
+    else:body=dict(system=[{'text':system}],messages=[{'role':'user','content':[{'text':user}]}],inferenceConfig={'maxTokens':n})
     # Compatibility endpoints differ in token-limit names; omit an optional cap for chat.
     return endpoint(c),headers,body
 

@@ -17,7 +17,7 @@ import prompt_enhancer as PE
 import workspaces as WS
 from enhancer_ui import EnhancementSettings,EnhancementReview
 
-VERSION='0.5.0'
+VERSION='0.5.1'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -286,15 +286,17 @@ class Window(QMainWindow):
             if cfg is None:return
         context=dict(seconds=self.controls['seconds'].value(),ratio=self.controls['ratio'].currentData(),**{key:len(value.paths) for key,value in self.pickers.items()})
         def work():
-            self.emit('pair',('正在增强剧本提示词…','Enhancing your video prompt…'))
-            result=PE.enhance(cfg,draft,context);self.emit('enhanced',dict(draft=draft,result=result))
+            self.emit('pair',(f"正在按 {context['seconds']} 秒增强剧本提示词…",f"Enhancing your prompt for {context['seconds']} seconds…"))
+            result=PE.enhance(cfg,draft,context);self.emit('enhanced',dict(draft=draft,result=result,seconds=context['seconds']))
         self.start_worker(work)
     def review_enhancement(self,value):
         # Keep originals/results locally; no credentials or endpoint configuration in history.
         history=self.data/'prompt_history';history.mkdir(parents=True,exist_ok=True)
         E.atomic_json(E.unique_path(history/(time.strftime('%Y%m%d_%H%M%S')+'.json')),value)
         dialog=EnhancementReview(self,value['draft'],value['result'])
+        if value.get('seconds') is not None:dialog.setWindowTitle(self.t(f"查看增强结果 · {value['seconds']} 秒",f"Review enhanced prompt · {value['seconds']} seconds"))
         if dialog.exec()==QDialog.DialogCode.Accepted:
+            if value.get('seconds',self.controls['seconds'].value())!=self.controls['seconds'].value() and not self.confirm(self.t(f"本次结果按 {value['seconds']} 秒设计，但你已更改生成时长。仍要应用？",f"This result was designed for {value['seconds']} seconds, but the duration has changed. Apply anyway?")):return
             current=self.prompt.toPlainText().strip()
             if current!=value['draft'] and not self.confirm(self.t('等待增强时你修改了原文。仍要应用增强结果？','You edited the draft while waiting. Apply the enhanced result anyway?')):return
             cursor=self.prompt.textCursor();cursor.select(cursor.SelectionType.Document);cursor.insertText(dialog.result_text);self.prompt.setTextCursor(cursor);self.save_preferences()

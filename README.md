@@ -69,6 +69,8 @@ Choose **Enhance prompt** below the story box. First use opens settings for the 
 
 The **Reference format** tab accepts pasted text or imported TXT/Markdown. The bundled neutral format covers references, continuity, duration, shots, sound and negative constraints without importing an example's story. Only the draft, reference format, duration and media counts are sent to your configured endpoint; media files and local paths are not sent. Review and edit the result before applying it. Ctrl+Z restores the previous prompt; originals/results also stay in local `prompt_history`.
 
+The selected generation duration (1–15 seconds) is authoritative, even if the draft or reference example gives another duration. Enhancement instructions require a continuous shot schedule from 0 to the selected duration, with suitable pacing. The review title shows the duration used; changing it while waiting triggers a confirmation before applying.
+
 API keys are encrypted with Windows DPAPI for the current account. They are not included in task manifests or logs; moving settings to another PC/account requires entering the key again. Compatibility Chat endpoints manage their own output cap; other adapters expose a maximum-output setting. Provider/model support varies. Protocol tests use fixtures; real-provider validation requires your own configuration.
 
 ## Persistent workspace and old tasks

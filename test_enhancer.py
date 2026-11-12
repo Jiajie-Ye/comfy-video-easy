@@ -23,12 +23,24 @@ class EnhancerTests(unittest.TestCase):
             c=self.config(kind);url,headers,body=P.request_data(c,'中文剧情',dict(seconds=10,images=2,server='private-server',files=['private-image.png']))
             serialized=json.dumps(body);self.assertNotIn('private-server',serialized);self.assertNotIn('private-image',serialized);self.assertNotIn(c['api_key'],url);self.assertNotIn(c['api_key'],serialized)
             response=Mock(status_code=200);response.json.return_value=payloads[kind];session=Mock();session.post.return_value=response
-            self.assertEqual(P.enhance(c,'story',{},session),'enhanced');self.assertFalse(session.post.call_args.kwargs['allow_redirects']);session.post.assert_called_once()
+            self.assertEqual(P.enhance(c,'story',{'seconds':10},session),'enhanced');self.assertFalse(session.post.call_args.kwargs['allow_redirects']);session.post.assert_called_once()
+    def test_selected_duration_is_authoritative_for_every_provider(self):
+        for kind,_ in P.KINDS:
+            for seconds in (1,5,15):
+                c=self.config(kind);c['template']='Example: 10 seconds, shots 0-5 and 5-10'
+                _,_,body=P.request_data(c,'A 20-second walk with Chinese dialogue',dict(seconds=seconds))
+                system={'chat':lambda:body['messages'][0]['content'],'responses':lambda:body['instructions'],'anthropic':lambda:body['system'],'gemini':lambda:body['systemInstruction']['parts'][0]['text'],'bedrock':lambda:body['system'][0]['text']}[kind]()
+                self.assertIn(f'current UI target is exactly {seconds} seconds',system)
+                self.assertIn(f'ending at exactly {seconds} seconds',system)
+                self.assertIn('overrides any duration or timestamps',system)
+    def test_missing_or_invalid_duration_is_rejected(self):
+        for seconds in (None,0,16,True,5.5,'10'):
+            with self.assertRaises(P.EnhancementError):P.request_data(self.config(),'story',dict(seconds=seconds))
     def test_secret_safe_errors_and_redirects(self):
         c=self.config();response=Mock(status_code=401,text='test-private-key');session=Mock();session.post.return_value=response
-        with self.assertRaises(P.EnhancementError) as error:P.enhance(c,'story',{},session)
+        with self.assertRaises(P.EnhancementError) as error:P.enhance(c,'story',{'seconds':10},session)
         self.assertNotIn(c['api_key'],str(error.exception));response.status_code=302
-        with self.assertRaises(P.EnhancementError):P.enhance(c,'story',{},session)
+        with self.assertRaises(P.EnhancementError):P.enhance(c,'story',{'seconds':10},session)
     def test_truncated_outputs_rejected(self):
         for kind,data in [('chat',{'choices':[{'finish_reason':'length'}]}),('responses',{'status':'incomplete'}),('anthropic',{'stop_reason':'max_tokens'}),('gemini',{'candidates':[{'finishReason':'MAX_TOKENS'}]}),('bedrock',{'stopReason':'max_tokens'})]:
             with self.assertRaises(P.EnhancementError):P.parse_response(kind,data)

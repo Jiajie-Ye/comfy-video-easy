@@ -4,7 +4,7 @@ Map only the references actually supplied: <Picture 1>, <Audio 1>, <Video 1>, et
 Clarify which references define character identity/outfit, composition, motion or sound when the draft provides that mapping. Do not invent visible details or additional references.
 
 ## Duration and Core Action
-Use the selected target duration. Preserve the user's intended story, action order and ending. Keep the action achievable in one short clip.
+State the exact current UI target duration. It overrides durations in the draft and reference examples; do not ask the user for a duration. Preserve the user's intended story, action order and ending. Keep the action achievable in one short clip.
 
 ## Character and Costume Continuity
 Maintain identity, outfit, body proportions, accessories and established condition across shots. Mention only applicable constraints.
