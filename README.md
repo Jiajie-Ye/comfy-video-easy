@@ -2,6 +2,8 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
+Our goal is to help people who have never made an AI video—including older adults—get started quickly. With clear labels, reference previews, and a guided interface, users can focus on their ideas without learning the ComfyUI node editor first. A knowledgeable helper still needs to prepare the server and models.
+
 A simple Windows desktop client that turns a ComfyUI MiniMax H3 video workflow into an approachable form. It supports English and Chinese, reference media, two-stage sampling, and local last-frame extraction.
 
 > This client targets a specific MiniMax H3 reference-video workflow. It is not a universal frontend for arbitrary ComfyUI workflows. Install the required models and custom nodes on your own server. This repository contains no model weights, private server addresses, reference media, or generation records.
@@ -12,7 +14,7 @@ A simple Windows desktop client that turns a ComfyUI MiniMax H3 video workflow i
 - Prompts, aspect ratios, and integer durations from 1 to 15 seconds, adjustable with the mouse wheel, arrows, or keyboard.
 - First- and second-pass sampling, random or fixed seeds, resolution, and sampling settings.
 - Task history, downloads, resumed status checks, saved settings, and refinement.
-- Local video playback and last-frame extraction with FFmpeg.
+- In-app video preview with playback controls, an optional system player, and last-frame extraction with FFmpeg.
 - A light interface with rounded controls. Switch languages at the top right or press Alt+L.
 
 ## Requirements and setup

@@ -64,6 +64,18 @@ class ModernTests(unittest.TestCase):
         self.assertGreater(w.prompt.width(),250);self.assertGreater(w.run.width(),100)
         self.assertLessEqual(w.run.mapTo(w,w.run.rect().bottomRight()).x(),w.width())
         self.assertLessEqual(w.run.mapTo(w,w.run.rect().bottomRight()).y(),w.height())
+    def test_initial_height_leaves_space_for_taskbar(self):
+        area=self.w.screen().availableGeometry()
+        self.assertLessEqual(self.w.height(),min(740,area.height()-40))
+    def test_internal_play_does_not_launch_system_player(self):
+        from unittest.mock import patch
+        from PyQt6.QtCore import QUrl
+        path=Path(self.tmp.name)/'sample.mp4';path.write_bytes(b'placeholder')
+        with patch.object(self.w,'chosen_file',return_value=str(path)),patch.object(self.w,'open_path') as external,patch.object(self.w.player,'play'):
+            self.w.play();external.assert_not_called();self.assertEqual(self.w.player.source(),QUrl.fromLocalFile(str(path.resolve())))
+        self.w.player.pause();source=self.w.player.source();self.w.toggle_language();self.assertEqual(self.w.player.source(),source)
+        with patch.object(self.w,'open_path') as external:
+            self.w.play_external();external.assert_called_once();self.assertEqual(Path(external.call_args.args[0]),path.resolve())
     def test_round_corners_are_applied(self):self.assertIn('border-radius:12px',self.w.styleSheet())
 
 if __name__=='__main__':unittest.main(verbosity=2)

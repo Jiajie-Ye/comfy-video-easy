@@ -7,10 +7,13 @@ from PyQt6.QtGui import QDesktopServices, QKeySequence, QShortcut, QImageReader,
 from PyQt6.QtWidgets import (QApplication,QMainWindow,QWidget,QFrame,QVBoxLayout,QHBoxLayout,QGridLayout,
     QLabel,QPushButton,QTextEdit,QLineEdit,QComboBox,QSpinBox,QCheckBox,QListWidget,QListWidgetItem,
     QStackedWidget,QScrollArea,QFileDialog,QMessageBox,QProgressBar,QTableWidget,QTableWidgetItem,
-    QHeaderView,QAbstractItemView,QSizePolicy,QDialog,QDialogButtonBox)
+    QHeaderView,QAbstractItemView,QSizePolicy,QDialog,QDialogButtonBox,QSlider)
+if sys.platform=='win32':os.environ.setdefault('QT_MEDIA_BACKEND','windows')
+from PyQt6.QtMultimedia import QMediaPlayer,QAudioOutput
+from PyQt6.QtMultimediaWidgets import QVideoWidget
 import engine as E
 
-VERSION='0.2.1'
+VERSION='0.3.0'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -148,7 +151,11 @@ class Window(QMainWindow):
             old=json.loads((self.data/'settings.json').read_text('utf-8'));self.config.update(old.get('config',{}));self.output=old.get('output',self.output);self.lang=old.get('language','zh')
         except (OSError,ValueError):pass
         if self.lang not in ('zh','en'):self.lang='zh'
-        self.bridge=Bridge();self.bridge.event.connect(self.on_event);self.resize(1280,900);self.setMinimumSize(1000,720)
+        self.bridge=Bridge();self.bridge.event.connect(self.on_event)
+        self.player=QMediaPlayer(self);self.audio=QAudioOutput(self);self.audio.setVolume(.7);self.player.setAudioOutput(self.audio)
+        self.player.positionChanged.connect(self.update_playback);self.player.durationChanged.connect(self.update_playback);self.player.playbackStateChanged.connect(self.update_playback);self.player.errorOccurred.connect(self.playback_error)
+        area=self.screen().availableGeometry();width=min(1220,area.width()-40);height=min(740,area.height()-80)
+        self.setMinimumSize(min(960,width),min(560,height));self.resize(width,height);self.move(area.x()+20,area.y()+20)
         self.build();QShortcut(QKeySequence('Ctrl+Return'),self,activated=self.generate);QShortcut(QKeySequence('Alt+L'),self,activated=self.toggle_language)
     def t(self,zh,en):return zh if self.lang=='zh' else en
     def label(self,text,style='',wrap=False):
@@ -191,9 +198,11 @@ class Window(QMainWindow):
             scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setWidget(page);self.stack.addWidget(scroll)
         self.progress=QProgressBar();self.progress.setTextVisible(False);self.progress.setRange(0,0);c.addWidget(self.progress)
         foot=QHBoxLayout();self.status=self.label('','muted',True);foot.addWidget(self.status,1);self.run=self.button(self.t('开始生成  ↗','Generate video  ↗'),self.generate,'primary');foot.addWidget(self.run);c.addLayout(foot)
-        self.navigate(self.page);self.sync_busy();self.refresh_history();self.update_status()
+        self.navigate(self.page);self.sync_busy();self.refresh_history();self.update_status();self.update_playback()
     def navigate(self,i):
-        self.page=i;self.stack.setCurrentIndex(i);self.title.setText(self.t(*NAMES[i]))
+        self.page=i
+        if i!=1:self.player.pause()
+        self.stack.setCurrentIndex(i);self.title.setText(self.t(*NAMES[i]))
         subtitles=[('把想法写下来，让画面开始发生。','Describe your idea. Bring it to life.'),('每一次创作，都有迹可循。','Your generations, settings and results in one place.'),('将视频的最后一帧，留给下一个镜头。','Keep the final frame for your next shot.'),('按你的创作习惯，调整每一处细节。','Fine-tune your generation preferences.'),('从第一段视频开始。','Start with your first video.')]
         self.subtitle.setText(self.t(*subtitles[i]))
         for n,b in enumerate(self.nav):b.setChecked(n==i)
@@ -243,13 +252,39 @@ class Window(QMainWindow):
         second.addWidget(self.label(self.t('默认 4 步、0.2 去噪。二采效果请与原片对比。','Defaults: 4 steps, 0.2 denoise. Compare the refined result with the first pass.'),'muted',True));second.addStretch()
         self.section(v,self.t('服务器','Server'));v.addWidget(self.entry('server'));v.addWidget(self.label(self.t('填写你自己的 ComfyUI 地址；支持本机、局域网或 Tailscale。','Enter your own ComfyUI URL: local, LAN, or Tailscale.'),'muted'))
     def history_page(self,v):
+        v.setSpacing(10)
         h=QHBoxLayout();h.addWidget(self.label(self.t('最近的创作','Recent creations'),'section'));h.addStretch();h.addWidget(self.button(self.t('刷新','Refresh'),self.refresh_history));v.addLayout(h)
-        self.table=QTableWidget(0,3);self.table.setHorizontalHeaderLabels([self.t('时间','Created'),self.t('状态','Status'),self.t('实际一采种子','Actual first-pass seed')]);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch);self.table.verticalHeader().hide();self.table.verticalHeader().setDefaultSectionSize(48);self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows);self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection);self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers);self.table.setShowGrid(False);self.table.setMinimumHeight(230);self.table.itemSelectionChanged.connect(self.select_job);v.addWidget(self.table)
+        self.table=QTableWidget(0,3);self.table.setHorizontalHeaderLabels([self.t('时间','Created'),self.t('状态','Status'),self.t('实际一采种子','Actual first-pass seed')]);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch);self.table.verticalHeader().hide();self.table.verticalHeader().setDefaultSectionSize(48);self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows);self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection);self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers);self.table.setShowGrid(False);self.table.setMinimumHeight(120);self.table.setMaximumHeight(150);self.table.itemSelectionChanged.connect(self.select_job);v.addWidget(self.table)
         h=QHBoxLayout()
         for zh,en,fn in [('继续查询 / 下载','Resume / download',self.resume),('用这条做二采','Refine this result',self.refine),('载入参数','Load settings',self.load_job),('打开文件夹','Open folder',self.open_folder)]:h.addWidget(self.button(self.t(zh,en),fn))
         h.addStretch();self.play_button=self.button(self.t('播放视频','Play video'),self.play);self.frame_button=self.button(self.t('提取末帧','Extract last frame'),self.extract_result);h.addWidget(self.play_button);h.addWidget(self.frame_button);v.addLayout(h)
-        self.details=self.label(self.t('选择一条任务，查看参数与结果。','Select a task to see its settings and results.'),'muted',True);self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);v.addWidget(self.details)
-        self.files=QListWidget();self.files.setMinimumHeight(110);self.files.itemDoubleClicked.connect(lambda _:self.play());v.addWidget(self.files)
+        lower=QHBoxLayout();left=QVBoxLayout();lower.addLayout(left,4)
+        self.details=self.label(self.t('选择一条任务，查看参数与结果。','Select a task to see its settings and results.'),'muted',True);self.details.setMaximumHeight(110);self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);left.addWidget(self.details)
+        self.files=QListWidget();self.files.setMinimumHeight(100);self.files.itemDoubleClicked.connect(lambda _:self.play());left.addWidget(self.files,1)
+        self.preview_panel=QFrame();self.preview_panel.setObjectName('card');panel=QVBoxLayout(self.preview_panel);panel.setContentsMargins(12,10,12,10)
+        heading=QHBoxLayout();heading.addWidget(self.label(self.t('视频预览','Video preview'),'section'));heading.addStretch();heading.addWidget(self.button(self.t('系统播放器 ↗','System player ↗'),self.play_external,'quiet'));panel.addLayout(heading)
+        self.video_widget=QVideoWidget();self.video_widget.setMinimumSize(240,120);self.video_widget.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Expanding);self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio);panel.addWidget(self.video_widget,1);self.player.setVideoOutput(self.video_widget)
+        self.media_note=self.label(Path(self.player.source().toLocalFile()).name if not self.player.source().isEmpty() else self.t('选择结果后点击“播放视频”','Select a result and choose Play video'),'muted',True);panel.addWidget(self.media_note)
+        controls=QHBoxLayout();self.pause_button=self.button(self.t('播放','Play'),self.toggle_playback,'quiet');controls.addWidget(self.pause_button)
+        self.seek=QSlider(Qt.Orientation.Horizontal);self.seek.setRange(0,self.player.duration());self.seek.sliderMoved.connect(self.player.setPosition);controls.addWidget(self.seek,1);self.media_time=self.label('00:00 / 00:00','muted');controls.addWidget(self.media_time);panel.addLayout(controls)
+        lower.addWidget(self.preview_panel,5);v.addLayout(lower,1)
+    def update_playback(self,*_):
+        if not hasattr(self,'seek'):return
+        self.seek.setRange(0,self.player.duration());self.seek.setEnabled(self.player.isSeekable())
+        if not self.seek.isSliderDown():self.seek.setValue(self.player.position())
+        def stamp(ms):return f'{ms//60000:02d}:{ms//1000%60:02d}'
+        self.media_time.setText(stamp(self.player.position())+' / '+stamp(self.player.duration()))
+        self.pause_button.setText(self.t('暂停','Pause') if self.player.playbackState()==QMediaPlayer.PlaybackState.PlayingState else self.t('播放','Play'))
+    def playback_error(self,*_):
+        self.media_note.setText(self.t('无法内嵌播放，请尝试右上角“系统播放器”。','Cannot play here. Try System player at the top right.'))
+        self.media_note.setToolTip(self.player.errorString())
+    def toggle_playback(self):
+        if self.player.source().isEmpty():self.play()
+        elif self.player.playbackState()==QMediaPlayer.PlaybackState.PlayingState:self.player.pause()
+        else:self.player.play()
+    def play_external(self):
+        p=self.player.source().toLocalFile() or self.chosen_file()
+        if p:self.player.pause();self.open_path(p)
     def refresh_history(self):
         if not hasattr(self,'table'):return
         self.output=self.output_edit.text();self.jobs={};self.table.blockSignals(True);self.table.setRowCount(0)
@@ -283,7 +318,10 @@ class Window(QMainWindow):
         return item.data(Qt.ItemDataRole.UserRole)
     def play(self):
         p=self.chosen_file()
-        if p:self.open_path(p)
+        if p:
+            if not Path(p).is_file():self.info(self.t('视频文件不存在，请重新下载。','Video file is missing. Download it again.'));return
+            self.player.setSource(QUrl.fromLocalFile(str(Path(p).resolve())));self.media_note.setText(Path(p).name);self.player.play()
+            self.stack.widget(1).ensureWidgetVisible(self.preview_panel)
     def open_folder(self):
         j=self.selected_job()
         if j:self.open_path(j['folder'])
@@ -441,7 +479,7 @@ class Window(QMainWindow):
         if self.busy and not self.confirm(self.t('服务器任务可能继续运行。关闭窗口会中断本机上传或下载，之后可从任务记录继续查询。现在关闭？','Server tasks may keep running. Local uploads or downloads will stop. You can resume from My tasks later. Close now?')):event.ignore();return
         try:self.save_preferences()
         except OSError:pass
-        self.stop.set();event.accept()
+        self.player.stop();self.stop.set();event.accept()
 
 def self_test(folder,check_server=False):
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True);report={'version':VERSION,'checks':[]}
@@ -449,7 +487,11 @@ def self_test(folder,check_server=False):
         video=folder/'self_test.mp4';r=E.run_media([E.ffmpeg_path(),'-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=blue:s=64x64:r=24:d=1','-c:v','libx264','-pix_fmt','yuv420p','-y',str(video)])
         if r.returncode:raise RuntimeError(r.stderr)
         report['checks'].append('bundled_ffmpeg');assert E.inspect_video(video)['streams'][0]['width']==64;report['checks'].append('bundled_ffprobe');assert E.extract_last_frame(video,folder).is_file();report['checks'].append('last_frame')
-        app=QApplication.instance() or QApplication([]);w=Window(folder/'ui_data');w.prompt.setPlainText('Test prompt 中文');w.toggle_language();assert w.prompt.toPlainText()=='Test prompt 中文';report['checks'].append('qt_and_language_toggle');w.close()
+        app=QApplication.instance() or QApplication([]);w=Window(folder/'ui_data');w.prompt.setPlainText('Test prompt 中文');w.toggle_language();assert w.prompt.toPlainText()=='Test prompt 中文';report['checks'].append('qt_and_language_toggle')
+        frames=[];w.video_widget.videoSink().videoFrameChanged.connect(lambda frame:frames.append(frame.isValid()))
+        w.player.setSource(QUrl.fromLocalFile(str(video.resolve())));w.player.play();deadline=time.monotonic()+10
+        while not any(frames) and time.monotonic()<deadline:app.processEvents();time.sleep(.02)
+        assert any(frames),w.player.errorString() or 'No decoded video frame';report['checks'].append('embedded_video_decode');w.close()
         if check_server:report['server']=E.Client().json('/system_stats')['system']['comfyui_version']
         report['passed']=True
     except Exception:report['passed']=False;report['error']=traceback.format_exc()
