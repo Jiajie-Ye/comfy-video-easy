@@ -80,6 +80,8 @@ The selected generation duration (1–15 seconds) is authoritative, even if the 
 
 API keys are encrypted with Windows DPAPI for the current account. They are not included in task manifests or logs; moving settings to another PC/account requires entering the key again. Compatibility Chat endpoints manage their own output cap; other adapters expose a maximum-output setting. Provider/model support varies. Protocol tests use fixtures; real-provider validation requires your own configuration.
 
+Editor playback no longer gates frames or the timeline on exact video-frame timestamps: decoder timestamps can start after zero. Clip transitions are deferred outside decoder callbacks, pending loads retain their seek target, and resuming does not seek the same decoder twice. Regression coverage includes offset timestamps, seek/play, clip boundaries, and split-source playback.
+
 ## Character / scene image generation
 
 Choose **Generate character / scene images** in the Images card. In the separate window, write a description and optionally add reference pictures from local files or current video references. First generation asks for an image API type, URL, API key and exact image-model name; later generations reuse this separate configuration. Review the result, enlarge it if needed, then choose **Add to references**. Images are not inserted automatically; the video prompt and first-frame selection remain unchanged.

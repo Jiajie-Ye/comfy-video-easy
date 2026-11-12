@@ -94,7 +94,7 @@ class Timeline(QWidget):
 
 class Editor(QWidget):
     def __init__(self,window):
-        super().__init__();self.window=window;self.t=window.t;self.clips=[];self.cues=[];self.selected=-1;self.cursor=0.;self.busy=False;self.undo=[];self.cancel=threading.Event();self.pending=None;self.preview_only=False;self.continuous=False;self.loading=False;self.seek_target=None;self.scrub_value=None
+        super().__init__();self.window=window;self.t=window.t;self.clips=[];self.cues=[];self.selected=-1;self.cursor=0.;self.busy=False;self.undo=[];self.cancel=threading.Event();self.pending=None;self.preview_only=False;self.continuous=False;self.loading=False;self.seek_target=None;self.scrub_value=None;self.playback_revision=0
         self.project=window.data/'editing_project.json'
         try:
             data=json.loads(self.project.read_text('utf-8'));self.clips=data.get('clips',[]);self.cues=data.get('cues',[])
@@ -152,27 +152,31 @@ class Editor(QWidget):
         self.time.setText(f'{value:.2f} / {X.total_duration(self.clips):.2f}s');self.timeline.update()
     def select(self,index,autoplay=False,source_time=None):
         if not 0<=index<len(self.clips):return
-        self.loading=True;self.continuous=autoplay;self.selected=index;c=self.clips[index];self.start.setValue(c['start']);self.end.setValue(c['end']);self.clip_name.setText(f'{index+1}. '+Path(c['path']).name);self.cursor=c['start'] if source_time is None else max(c['start'],min(source_time,c['end']));self.update_time()
+        self.scrub_timer.stop();self.scrub_value=None;self.playback_revision+=1
+        previous_status=self.player.mediaStatus();at_source_end=self.player.duration()>0 and self.player.position()>=self.player.duration()-100
+        self.loading=True;self.player.pause();self.continuous=autoplay;self.selected=index;c=self.clips[index];self.start.setValue(c['start']);self.end.setValue(c['end']);self.clip_name.setText(f'{index+1}. '+Path(c['path']).name);self.cursor=c['start'] if source_time is None else max(c['start'],min(source_time,c['end']));self.update_time()
         # Decode just before the exclusive out-point when the playhead is at the end.
         target=min(self.cursor,max(c['start'],c['end']-.04));self.pending=target;self.seek_target=target;self.preview_only=not autoplay;self.audio.setMuted(not autoplay)
         url=QUrl.fromLocalFile(c['path'])
-        if self.player.source()!=url:self.player.stop();self.player.setSource(url)
-        else:self.pending=None;self.player.setPosition(round(target*1000));self.loading=False
+        if self.player.source()!=url or at_source_end or previous_status in (QMediaPlayer.MediaStatus.EndOfMedia,QMediaPlayer.MediaStatus.InvalidMedia):
+            self.player.stop();self.player.setSource(QUrl());self.player.setSource(url)
+        elif previous_status in (QMediaPlayer.MediaStatus.LoadedMedia,QMediaPlayer.MediaStatus.BufferedMedia,QMediaPlayer.MediaStatus.BufferingMedia,QMediaPlayer.MediaStatus.StalledMedia):
+            self.pending=None;self.player.setPosition(round(target*1000));self.loading=False
         if Path(c['path']).is_file():self.player.play()
     def media_status(self,status):
         if status in (QMediaPlayer.MediaStatus.LoadedMedia,QMediaPlayer.MediaStatus.BufferedMedia) and self.pending is not None:
             target=self.pending;self.pending=None;self.player.setPosition(round(target*1000));self.loading=False
-        if status==QMediaPlayer.MediaStatus.EndOfMedia and self.continuous and not self.loading and self.seek_target is None:self.advance()
+        if status==QMediaPlayer.MediaStatus.EndOfMedia and self.continuous and not self.loading:self.advance()
     def frame(self,frame):
         if self.selected<0 or self.loading or not frame.isValid():return
-        if self.seek_target is not None:
-            timestamp=frame.startTime()/1000000 if frame.startTime()>=0 else self.player.position()/1000
-            if abs(timestamp-self.seek_target)>.15:return
-            self.seek_target=None
+        # QVideoFrame timestamps may include a stream offset (e.g. 166 ms of
+        # B-frame delay). They are not the QMediaPlayer seek clock. Accept the
+        # decoder's valid frame instead of waiting forever for an exact timestamp.
+        self.seek_target=None
         self.video.show_frame(frame)
         if self.preview_only:self.preview_only=False;self.player.pause();self.audio.setMuted(False)
     def position(self,ms):
-        if self.selected<0 or self.loading or self.seek_target is not None or self.scrub_value is not None or self.seek.isSliderDown():return
+        if self.selected<0 or self.loading or self.scrub_value is not None or self.seek.isSliderDown():return
         c=self.clips[self.selected]
         if self.continuous:
             self.cursor=max(c['start'],min(ms/1000,c['end']));self.update_time()
@@ -182,7 +186,11 @@ class Editor(QWidget):
     def advance(self):
         if not self.continuous:return
         self.continuous=False
-        if self.selected+1<len(self.clips):self.select(self.selected+1,True)
+        if self.selected+1<len(self.clips):
+            # Do not replace a Media Foundation source inside its position/end callback.
+            # Defer until the decoder returns; a revision cancels stale transitions.
+            revision=self.playback_revision;index=self.selected+1
+            QTimer.singleShot(0,lambda:self.select(index,True) if revision==self.playback_revision else None)
         else:self.player.pause();self.cursor=self.clips[-1]['end'];self.update_time()
     def seek_source(self,seconds):
         if self.selected<0:return
@@ -201,12 +209,16 @@ class Editor(QWidget):
     def finish_scrub(self):self.scrub_timer.stop();self.scrub_value=self.seek.value()/1000;self.flush_scrub()
     def play(self):
         if self.selected<0:return
-        if self.continuous:self.pause()
+        if self.continuous:self.pause();return
+        pending_scrub=self.scrub_value;self.scrub_timer.stop();self.scrub_value=None;c=self.clips[self.selected]
+        if self.cursor>=c['end']-.04:
+            self.select(self.selected+1 if self.selected+1<len(self.clips) else 0,True)
+        elif pending_scrub is not None or self.player.source()!=QUrl.fromLocalFile(c['path']):
+            self.select(self.selected,True,self.cursor)
         else:
-            c=self.clips[self.selected]
-            if self.selected==len(self.clips)-1 and self.cursor>=c['end']-.04:self.select(0,True)
-            else:self.select(self.selected,True,self.cursor)
-    def pause(self):self.continuous=False;self.preview_only=False;self.player.pause()
+            # Resume an already-positioned decoder without issuing the same seek again.
+            self.preview_only=False;self.continuous=True;self.audio.setMuted(False);self.player.play()
+    def pause(self):self.playback_revision+=1;self.continuous=False;self.preview_only=False;self.player.pause()
     def set_boundary(self,start):
         if self.selected>=0:(self.start if start else self.end).setValue(self.cursor)
     def trim(self):

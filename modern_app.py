@@ -18,7 +18,7 @@ import workspaces as WS
 from enhancer_ui import EnhancementSettings,EnhancementReview
 from image_ui import ImageCreator
 
-VERSION='0.6.0'
+VERSION='0.6.1'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -732,7 +732,12 @@ def self_test(folder,check_server=False):
         cfg=PE.defaults();cfg.update(url='https://example.invalid/v1',model='test',api_key='test-key')
         url,headers,body=PE.request_data(cfg,'A person walks into a courtyard.',dict(seconds=10,images=0,audios=0,videos=0));assert url.endswith('/chat/completions');assert cfg['template'];report['checks'].append('enhancer_template_and_payload')
         import image_service as IS
-        image_paths=IS.save_images(w.data,[E.extract_last_frame(video,folder).read_bytes()]);dialog=ImageCreator(w);assert dialog.results.count()>0 and not dialog.preview.original.isNull();dialog.use_result();assert dialog.result_path==image_paths[0];report['checks'].append('image_generation_save_preview_and_select');w.close()
+        image_paths=IS.save_images(w.data,[E.extract_last_frame(video,folder).read_bytes()]);dialog=ImageCreator(w);assert dialog.results.count()>0 and not dialog.preview.original.isNull();dialog.use_result();assert dialog.result_path==image_paths[0];report['checks'].append('image_generation_save_preview_and_select')
+        offset_video=folder/'preview_offset.mp4';r=E.run_media([E.ffmpeg_path(),'-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=blue:s=64x64:r=24:d=1','-f','lavfi','-i','sine=frequency=400:duration=1','-vf','setpts=PTS+0.166667/TB','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-y',str(offset_video)]);assert r.returncode==0,r.stderr
+        editor=w.editor;editor.clips=[dict(id='preview1',path=str(offset_video.resolve()),duration=1.166667,start=0.,end=.5),dict(id='preview2',path=str(offset_video.resolve()),duration=1.166667,start=.5,end=1.)];editor.refresh();editor.play();deadline=time.monotonic()+8
+        while time.monotonic()<deadline and (editor.continuous or editor.selected!=1 or editor.cursor<.99):app.processEvents();time.sleep(.02)
+        assert editor.selected==1 and editor.cursor>=.99 and not editor.video.image.isNull(), 'Editor preview did not finish both clips'
+        report['checks'].append('editor_nonzero_timestamp_continuous_playback');editor.player.stop();editor.player.setSource(QUrl());w.close()
         if check_server:report['server']=E.Client().json('/system_stats')['system']['comfyui_version']
         report['passed']=True
     except Exception:report['passed']=False;report['error']=traceback.format_exc()

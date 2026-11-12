@@ -62,6 +62,28 @@ class ModernTests(unittest.TestCase):
         e=self.w.editor;image=QImage(20,20,QImage.Format.Format_RGB32);image.fill(QColor('red'));e.video.image=image
         e.video.show_frame(QVideoFrame());self.assertEqual(e.video.image.pixelColor(10,10),QColor('red'))
         e.clips=[];e.refresh();self.assertTrue(e.video.image.isNull())
+    def test_editor_accepts_valid_frames_with_nonzero_stream_timestamps(self):
+        from unittest.mock import Mock,patch
+        e=self.w.editor;e.clips=[dict(id='a',path='a.mp4',duration=5.,start=0.,end=5.)];e.refresh();e.loading=False;e.preview_only=False;e.continuous=True
+        for timestamp in (166666,800000,2000000):
+            e.seek_target=0.;frame=Mock();frame.isValid.return_value=True;frame.startTime.return_value=timestamp
+            with patch.object(e.video,'show_frame') as show:e.frame(frame);show.assert_called_once_with(frame)
+            self.assertIsNone(e.seek_target)
+    def test_editor_clock_and_clip_end_do_not_wait_for_a_video_frame(self):
+        from unittest.mock import patch
+        from PyQt6.QtMultimedia import QMediaPlayer
+        e=self.w.editor;e.clips=[dict(id='a',path='a.mp4',duration=5.,start=0.,end=5.),dict(id='b',path='b.mp4',duration=5.,start=0.,end=5.)];e.refresh();e.loading=False;e.continuous=True;e.seek_target=0.
+        e.position(1200);self.assertAlmostEqual(e.cursor,1.2);self.assertEqual(e.seek.value(),1200)
+        with patch.object(e,'advance') as advance:e.media_status(QMediaPlayer.MediaStatus.EndOfMedia);advance.assert_called_once()
+        e.position(5000);APP.processEvents();self.assertEqual(e.selected,1);self.assertTrue(e.continuous)
+    def test_play_after_scrub_cancels_pending_debounce(self):
+        e=self.w.editor;e.clips=[dict(id='a',path='a.mp4',duration=5.,start=0.,end=5.)];e.refresh();e.scrub(2500);self.assertTrue(e.scrub_timer.isActive());e.play();self.assertFalse(e.scrub_timer.isActive());self.assertIsNone(e.scrub_value);self.assertTrue(e.continuous);self.assertEqual(e.cursor,2.5)
+    def test_resume_does_not_seek_an_already_positioned_decoder_again(self):
+        from unittest.mock import patch
+        e=self.w.editor;e.clips=[dict(id='a',path='a.mp4',duration=5.,start=0.,end=5.)];e.refresh();e.loading=False;e.seek_target=None;e.cursor=2.;e.continuous=False
+        with patch.object(e,'select') as select,patch.object(e.player,'setPosition') as seek:
+            e.play();select.assert_not_called();seek.assert_not_called()
+        self.assertTrue(e.continuous)
     def test_duration_range_and_language_preservation(self):
         from PyQt6.QtCore import Qt,QPoint,QPointF
         from PyQt6.QtGui import QWheelEvent
