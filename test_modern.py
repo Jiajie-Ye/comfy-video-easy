@@ -101,6 +101,19 @@ class ModernTests(unittest.TestCase):
         p=Path(self.tmp.name)/'video.mp4';p.write_bytes(b'example')
         with patch.object(self.w,'choose_frame_source',return_value='tasks'),patch.object(self.w,'choose_completed_video',return_value=str(p)),patch('modern_app.QFileDialog.getOpenFileName') as browser,patch.object(self.w,'start_worker') as worker:
             self.w.extract_reference();browser.assert_not_called();worker.assert_called_once()
+    def test_enum_wheel_does_not_change_value_but_dropdown_still_selects(self):
+        from PyQt6.QtCore import Qt,QPoint,QPointF
+        from PyQt6.QtGui import QWheelEvent
+        from PyQt6.QtWidgets import QComboBox
+        for combo in self.w.findChildren(QComboBox):
+            combo.setCurrentIndex(0);combo.setFocus()
+            event=QWheelEvent(QPointF(5,5),QPointF(5,5),QPoint(0,0),QPoint(0,-120),Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier,Qt.ScrollPhase.NoScrollPhase,False)
+            APP.sendEvent(combo,event);self.assertEqual(combo.currentIndex(),0)
+            combo.setCurrentIndex(1);self.assertEqual(combo.currentIndex(),1)
+    def test_reset_defaults_preserves_user_content(self):
+        w=self.w;w.prompt.setPlainText('Keep my prompt');w.controls['server'].setText('http://localhost:8188');w.controls['sampler'].setCurrentIndex(2);w.controls['steps'].setText('31')
+        w.pickers['images'].paths=['example.png'];w.reset_parameters();w.capture()
+        self.assertEqual(w.config['sampler'],'euler');self.assertEqual(int(w.config['steps']),8);self.assertEqual(w.config['prompt'],'Keep my prompt');self.assertEqual(w.config['images'],['example.png']);self.assertEqual(w.config['server'],'http://localhost:8188')
     def test_round_corners_are_applied(self):self.assertIn('border-radius:12px',self.w.styleSheet())
 
 if __name__=='__main__':unittest.main(verbosity=2)

@@ -13,7 +13,7 @@ from PyQt6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 import engine as E
 
-VERSION='0.3.3'
+VERSION='0.3.4'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -50,7 +50,8 @@ QSpinBox::down-button {subcontrol-origin:border;subcontrol-position:bottom right
 QSpinBox::up-button:hover,QSpinBox::down-button:hover {background:#dceaff;}
 QSpinBox::up-arrow {image:url(__UP__);width:12px;height:10px;}
 QSpinBox::down-arrow {image:url(__DOWN__);width:12px;height:10px;}
-QComboBox::drop-down {border:0;width:28px;}
+QComboBox::drop-down {border:0;width:28px;background:#edf4ff;border-top-right-radius:10px;border-bottom-right-radius:10px;}
+QComboBox::down-arrow {image:url(__DOWN__);width:12px;height:10px;}
 QComboBox QAbstractItemView {background:white;border:1px solid #ddd;border-radius:8px;selection-background-color:#e6efff;selection-color:#252525;outline:0;padding:6px;}
 QCheckBox {spacing:9px;min-height:28px;}
 QCheckBox::indicator {width:19px;height:19px;border:1px solid #b6cae6;border-radius:6px;background:#fff;}
@@ -84,6 +85,11 @@ STATUS={
  '正在确认任务状态…':'Checking task status…','服务器正在记录结果…':'Finalizing results…',
  '任务已提交，正在排队或生成。':'Task submitted. Waiting for the server…',
  '连接暂时中断，正在重新查询（不会重复提交）…':'Connection interrupted. Reconnecting without resubmitting…'}
+
+class ClickOnlyComboBox(QComboBox):
+    """Scroll the page rather than accidentally changing a closed selector."""
+    def wheelEvent(self,event):
+        event.ignore()
 
 class Bridge(QObject):
     event=pyqtSignal(str,object)
@@ -213,7 +219,7 @@ class Window(QMainWindow):
         self.subtitle.setText(self.t(*subtitles[i]))
         for n,b in enumerate(self.nav):b.setChecked(n==i)
     def combo(self,key,options):
-        w=QComboBox()
+        w=ClickOnlyComboBox()
         for value,label in options:w.addItem(label,value)
         index=next((i for i in range(w.count()) if str(w.itemData(i))==str(self.config[key])),0);w.setCurrentIndex(index);self.controls[key]=w;return w
     def entry(self,key):
@@ -240,7 +246,13 @@ class Window(QMainWindow):
     def choose_output(self):
         p=QFileDialog.getExistingDirectory(self,self.t('选择保存文件夹','Choose output folder'),self.output_edit.text())
         if p:self.output_edit.setText(p);self.output=p;self.refresh_history()
+    def reset_parameters(self):
+        if self.busy:return
+        self.capture()
+        self.config.update({key:value for key,value in E.defaults().items() if key not in ('server','prompt','images','audios','videos')})
+        self.build();self.save_preferences();self.raw_status=None;self.status_pair=('生成参数已恢复默认。','Generation parameters restored to defaults.');self.update_status()
     def settings_page(self,v):
+        reset_row=QHBoxLayout();reset_row.addStretch();self.reset_button=self.button(self.t('恢复默认参数','Restore default parameters'),self.reset_parameters);reset_row.addWidget(self.reset_button);v.addLayout(reset_row)
         cols=QHBoxLayout();cols.setSpacing(28);v.addLayout(cols);first=QVBoxLayout();second=QVBoxLayout();cols.addLayout(first,1);cols.addLayout(second,1)
         def field(layout,zh,en,key,options=None):
             layout.addWidget(self.label(self.t(zh,en),'muted'));layout.addWidget(self.combo(key,[(x,str(x)) for x in options]) if options else self.entry(key))
@@ -483,7 +495,7 @@ class Window(QMainWindow):
     def update_status(self):self.status.setText(self.translate_status(self.raw_status) if self.raw_status is not None else self.t(*self.status_pair))
     def emit(self,name,value):self.bridge.event.emit(name,value)
     def sync_busy(self):
-        self.reference_frame_button.setEnabled(not self.busy);self.run.setEnabled(not self.busy);self.check.setEnabled(not self.busy);self.extract_button.setEnabled(not self.busy);self.progress.setVisible(self.busy)
+        self.reset_button.setEnabled(not self.busy);self.reference_frame_button.setEnabled(not self.busy);self.run.setEnabled(not self.busy);self.check.setEnabled(not self.busy);self.extract_button.setEnabled(not self.busy);self.progress.setVisible(self.busy)
         self.run.setText(self.t('处理中…','Working…') if self.busy else self.t('开始生成  ↗','Generate video  ↗'))
     def start_worker(self,fn):
         if self.busy:return

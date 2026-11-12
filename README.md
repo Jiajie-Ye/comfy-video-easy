@@ -49,6 +49,8 @@ Server node versions must support the input definitions in `engine.py`. **Check 
 
 ## Usage
 
+Fixed-choice parameters open a dropdown when clicked; scrolling over a closed selector no longer changes its value. Numeric inputs are unchanged. **Restore default parameters** in Settings resets generation options while preserving the server URL, prompt and references.
+
 Use **Last frame** in the image reference card, then choose **Choose a local file** or **Choose a completed task**. Completed tasks list downloaded videos directly, with date, filename, description and search—no folder browsing is required. Select a video and choose **Extract and add**. Its final frame is saved locally and automatically added as a numbered image reference with a thumbnail. The 9-image limit still applies.
 
 1. Configure the server and check the connection.
