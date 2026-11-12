@@ -13,64 +13,67 @@ from PyQt6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 import engine as E
 
-VERSION='0.3.1'
+VERSION='0.3.2'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
-QFrame#sidebar, QFrame#sidebar QLabel {background:#f5f5f4;}
+QFrame#sidebar, QFrame#sidebar QLabel {background:#f5f8ff;}
 QLabel#brand {font-size:23px;font-weight:600;letter-spacing:-1px;}
 QLabel#title {font-size:30px;font-weight:600;letter-spacing:-.5px;}
 QLabel#section {font-size:16px;font-weight:600;}
-QLabel#muted {color:#777774;font-size:13px;background:transparent;}
-QLabel#eyebrow {color:#777774;font-size:12px;letter-spacing:1px;background:transparent;}
-QLabel#connection {color:#777774;font-size:12px;background:transparent;}
-QPushButton {background:#ffffff;border:1px solid #e3e3e0;border-radius:10px;padding:9px 15px;min-height:20px;font-weight:500;}
-QPushButton:hover {background:#f1f1ee;border-color:#d4d4cf;}
-QPushButton:pressed {background:#e5e5e0;}
-QPushButton:focus {border:1px solid #8c8c82;}
-QPushButton:disabled {background:#f3f3f1;color:#a8a8a2;border-color:#eaeae6;}
-QPushButton#primary {background:#262624;color:white;border:1px solid #262624;border-radius:12px;padding:12px 24px;min-height:24px;}
-QPushButton#primary:hover {background:#41413d;}
-QPushButton#primary:disabled {background:#b6b6af;border-color:#b6b6af;color:#ffffff;}
+QLabel#muted {color:#66758b;font-size:13px;background:transparent;}
+QLabel#eyebrow {color:#66758b;font-size:12px;letter-spacing:1px;background:transparent;}
+QLabel#connection {color:#66758b;font-size:12px;background:transparent;}
+QPushButton {background:#edf4ff;color:#2e61a5;border:1px solid #cdddf5;border-radius:10px;padding:9px 15px;min-height:20px;font-weight:500;}
+QPushButton:hover {background:#e1edff;border-color:#a9c5ee;}
+QPushButton:pressed {background:#cfe1ff;}
+QPushButton:focus {border:1px solid #5187e7;}
+QPushButton:disabled {background:#f3f3f1;color:#a8a8a2;border-color:#edf3ff;}
+QPushButton#primary {background:#3478dc;color:white;border:1px solid #3478dc;border-radius:12px;padding:12px 24px;min-height:24px;}
+QPushButton#primary:hover {background:#2465c3;}
+QPushButton#primary:disabled {background:#abc6ec;border-color:#abc6ec;color:#ffffff;}
 QPushButton#nav {background:transparent;border:0;text-align:left;padding:12px 16px;border-radius:10px;font-size:15px;}
-QPushButton#nav:hover {background:#eaeae6;}
-QPushButton#nav:checked {background:#e7e7e2;color:#171716;font-weight:600;}
-QPushButton#quiet {border:0;background:transparent;color:#686862;padding:6px 8px;font-size:12px;}
-QPushButton#quiet:hover {background:#eeeee9;color:#252525;}
-QPushButton#language {background:#f6f6f3;border:1px solid #e8e8e2;border-radius:16px;padding:6px 14px;}
-QFrame#card {background:#fafaf8;border:1px solid #eaeae4;border-radius:14px;}
+QPushButton#nav:hover {background:#edf3ff;}
+QPushButton#nav:checked {background:#e5efff;color:#245eab;font-weight:600;}
+QPushButton#quiet {border:0;background:transparent;color:#536d90;padding:6px 8px;font-size:12px;}
+QPushButton#quiet:hover {background:#eaf2ff;color:#252525;}
+QPushButton#language {background:#edf4ff;border:1px solid #d4e3f9;border-radius:16px;padding:6px 14px;}
+QFrame#card {background:#ffffff;border:1px solid #dce7f6;border-radius:14px;}
 QFrame#card QLabel,QFrame#card QCheckBox {background:transparent;}
-QTextEdit,QLineEdit,QComboBox,QSpinBox {background:#fbfbf9;border:1px solid #e3e3dc;border-radius:10px;padding:10px;selection-background-color:#d8ddd5;selection-color:#252525;}
+QTextEdit,QLineEdit,QComboBox,QSpinBox {background:#ffffff;border:1px solid #dce5f2;border-radius:10px;padding:10px;selection-background-color:#dceaff;selection-color:#252525;}
 QTextEdit {padding:16px;border-radius:14px;font-size:15px;}
-QTextEdit:focus,QLineEdit:focus,QComboBox:focus,QSpinBox:focus {border-color:#9a9a90;background:#ffffff;}
+QTextEdit:focus,QLineEdit:focus,QComboBox:focus,QSpinBox:focus {border-color:#6a9ee9;background:#ffffff;}
 QComboBox {padding-right:30px;min-height:22px;}
 QSpinBox {padding-right:32px;min-height:22px;}
-QSpinBox::up-button {subcontrol-origin:border;subcontrol-position:top right;width:28px;border:0;border-top-right-radius:10px;background:#f0f0ec;}
-QSpinBox::down-button {subcontrol-origin:border;subcontrol-position:bottom right;width:28px;border:0;border-bottom-right-radius:10px;background:#f0f0ec;}
-QSpinBox::up-button:hover,QSpinBox::down-button:hover {background:#e4e4de;}
+QSpinBox::up-button {subcontrol-origin:border;subcontrol-position:top right;width:28px;border:0;border-top-right-radius:10px;background:#edf4ff;}
+QSpinBox::down-button {subcontrol-origin:border;subcontrol-position:bottom right;width:28px;border:0;border-bottom-right-radius:10px;background:#edf4ff;}
+QSpinBox::up-button:hover,QSpinBox::down-button:hover {background:#dceaff;}
 QSpinBox::up-arrow {image:url(__UP__);width:12px;height:10px;}
 QSpinBox::down-arrow {image:url(__DOWN__);width:12px;height:10px;}
 QComboBox::drop-down {border:0;width:28px;}
-QComboBox QAbstractItemView {background:white;border:1px solid #ddd;border-radius:8px;selection-background-color:#eeeee8;selection-color:#252525;outline:0;padding:6px;}
+QComboBox QAbstractItemView {background:white;border:1px solid #ddd;border-radius:8px;selection-background-color:#e6efff;selection-color:#252525;outline:0;padding:6px;}
 QCheckBox {spacing:9px;min-height:28px;}
-QCheckBox::indicator {width:19px;height:19px;border:1px solid #c7c7bf;border-radius:6px;background:#fff;}
-QCheckBox::indicator:checked {background:#343a32;border:1px solid #343a32;image:url(__CHECK__);}
+QCheckBox::indicator {width:19px;height:19px;border:1px solid #b6cae6;border-radius:6px;background:#fff;}
+QCheckBox::indicator:checked {background:#3478dc;border:1px solid #3478dc;image:url(__CHECK__);}
 QListWidget {background:transparent;border:0;outline:0;font-size:13px;}
 QListWidget::item {padding:7px 8px;border-radius:7px;}
-QListWidget::item:selected {background:#e7ebe3;color:#252525;}
-QListWidget::item:hover {background:#f0f0ea;}
+QListWidget::item:selected {background:#e3efff;color:#252525;}
+QListWidget::item:hover {background:#f0f6ff;}
 QScrollArea {border:0;background:#ffffff;}
 QScrollBar:vertical {width:8px;background:transparent;margin:3px;}
-QScrollBar::handle:vertical {background:#d7d7d0;border-radius:3px;min-height:30px;}
+QScrollBar::handle:vertical {background:#c7d8ef;border-radius:3px;min-height:30px;}
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical {height:0;}
 QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical {background:none;}
-QTableWidget {border:1px solid #e5e5df;border-radius:12px;gridline-color:#eeeeea;outline:0;selection-background-color:#edf0e8;selection-color:#252525;}
-QHeaderView::section {background:#f7f7f3;border:0;border-bottom:1px solid #e5e5df;padding:14px;text-align:left;color:#73736c;}
+QTableWidget {border:1px solid #dce5f2;border-radius:12px;gridline-color:#edf3fb;outline:0;selection-background-color:#e3efff;selection-color:#252525;}
+QHeaderView::section {background:#f5f8ff;border:0;border-bottom:1px solid #dce5f2;padding:14px;text-align:left;color:#60738f;}
 QTableWidget::item {padding:10px;border:0;}
-QProgressBar {border:0;background:#eeeee8;height:3px;max-height:3px;border-radius:1px;}
-QProgressBar::chunk {background:#596451;border-radius:1px;}
+QProgressBar {border:0;background:#e6efff;height:3px;max-height:3px;border-radius:1px;}
+QProgressBar::chunk {background:#4b8aeb;border-radius:1px;}
 QToolTip {background:#292a27;color:#ffffff;border:0;padding:7px;}
 QMessageBox {background:#ffffff;}
+QPushButton#accent {background:#e8f1ff;color:#245eab;border:1px solid #bcd3f5;border-radius:9px;padding:6px 10px;font-size:12px;}
+QPushButton#accent:hover {background:#d8e8ff;border-color:#90b6ec;}
+QPushButton#accent:disabled {background:#f2f5fa;color:#97a7bb;border-color:#e0e7f1;}
 '''
 NAMES=[('制作视频','Create video'),('我的任务','My tasks'),('末帧工具','Last frame'),('高级设置','Settings'),('使用指南','Guide')]
 RATIO_EN={'横屏 16:9':'Landscape 16:9','竖屏 9:16':'Portrait 9:16','方形 1:1':'Square 1:1','竖图 2:3':'Portrait 2:3'}
@@ -89,9 +92,10 @@ class Picker(QFrame):
     def __init__(self,app,key,zh,en,tag,limit,pattern):
         super().__init__();self.setObjectName('card');self.app=app;self.key=key;self.tag=tag;self.limit=limit;self.pattern=pattern
         self.paths=list(app.config[key]);v=QVBoxLayout(self);v.setContentsMargins(16,12,16,10);v.setSpacing(5)
-        h=QHBoxLayout();h.addWidget(app.label(app.t(zh,en),'section'));h.addStretch();h.addWidget(app.button(app.t('+ 添加','+ Add'),self.add,'quiet'));v.addLayout(h)
+        h=QHBoxLayout();h.addWidget(app.label(app.t(zh,en),'section'));h.addStretch()
         if key=='images':
-            app.reference_frame_button=app.button(app.t('从视频提取末帧','Last frame from video'),app.extract_reference,'quiet');v.addWidget(app.reference_frame_button)
+            app.reference_frame_button=app.button(app.t('提取末帧','Last frame'),app.extract_reference,'accent');app.reference_frame_button.setToolTip(app.t('选择视频，提取最后一帧并添加为参考图片','Choose a video and add its last frame as a reference'));h.addWidget(app.reference_frame_button)
+        h.addWidget(app.button(app.t('+ 添加','+ Add'),self.add,'accent'));v.addLayout(h)
         self.empty=app.label(app.t('未选择文件，点击添加','No files yet. Choose Add.'),'muted');v.addWidget(self.empty)
         self.list=QListWidget();self.list.setMaximumHeight(76);self.list.setMinimumHeight(42);self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.list.itemDoubleClicked.connect(self.preview);v.addWidget(self.list)
         if key=='images':
