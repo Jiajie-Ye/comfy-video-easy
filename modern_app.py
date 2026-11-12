@@ -13,7 +13,7 @@ from PyQt6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 import engine as E
 
-VERSION='0.3.2'
+VERSION='0.3.3'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -372,13 +372,67 @@ class Window(QMainWindow):
         picker=self.pickers['images']
         if len(picker.paths)>=picker.limit:
             self.info(self.t('参考图片已满 9 张，请先移除一张。','You already have 9 reference images. Remove one first.'));return
-        video,_=QFileDialog.getOpenFileName(self,self.t('选择视频，提取末帧并添加为参考图片','Choose a video to extract and add its last frame'),'',self.t('视频文件','Video files')+' (*.mp4 *.mov *.mkv *.avi *.webm *.m4v)')
+        source=self.choose_frame_source()
+        if source=='local':
+            video,_=QFileDialog.getOpenFileName(self,self.t('选择视频，提取末帧并添加为参考图片','Choose a video to extract and add its last frame'),'',self.t('视频文件','Video files')+' (*.mp4 *.mov *.mkv *.avi *.webm *.m4v)')
+        elif source=='tasks':video=self.choose_completed_video()
+        else:return
         if not video:return
+        if not Path(video).is_file():self.info(self.t('视频文件已移动或删除，请在“我的任务”重新下载。','This video was moved or deleted. Download it again in My tasks.'));return
         folder=self.data/'reference_frames'
         def work():
             self.emit('pair',('正在提取末帧并添加参考图片…','Extracting a last frame for your references…'))
             self.emit('reference_frame',str(E.extract_last_frame(video,folder).resolve()))
         self.start_worker(work)
+    def choose_frame_source(self):
+        dialog=QDialog(self);dialog.setWindowTitle(self.t('提取末帧 · 选择来源','Last frame · Choose a source'));dialog.setMinimumWidth(380)
+        layout=QVBoxLayout(dialog);layout.setContentsMargins(24,24,24,24);layout.setSpacing(16)
+        layout.addWidget(self.label(self.t('你想从哪里选择视频？','Where is your video?'),'section'))
+        result=[]
+        def choose(value):result.append(value);dialog.accept()
+        local=self.button(self.t('从本地文件选择','Choose a local file'),lambda:choose('local'));local.setMinimumHeight(44);layout.addWidget(local)
+        tasks=self.button(self.t('从已完成任务选择','Choose a completed task'),lambda:choose('tasks'),'primary');tasks.setMinimumHeight(44);layout.addWidget(tasks)
+        layout.addWidget(self.label(self.t('已完成任务可直接选择，不用找文件夹。','Completed tasks are listed here—no folders to browse.'),'muted',True))
+        layout.addWidget(self.button(self.t('取消','Cancel'),dialog.reject,'quiet'));dialog.exec()
+        return result[0] if result else None
+    def completed_video_choices(self):
+        choices=[];seen=set()
+        for manifest in sorted(Path(self.output_edit.text()).glob('*/task.json'),reverse=True)[:300]:
+            try:
+                job=json.loads(manifest.read_text('utf-8'))
+                if job.get('status')!='已完成':continue
+                prompt=' '.join(str(job.get('settings',{}).get('prompt','')).split())[:100]
+                for filename in reversed(job.get('files',[])):
+                    path=Path(filename)
+                    if not path.is_file() or path.suffix.lower() not in ('.mp4','.webm','.mov','.mkv','.avi','.m4v'):continue
+                    key=str(path.resolve())
+                    if key in seen:continue
+                    seen.add(key);name=path.name
+                    if self.lang=='en':name=name.replace('一采_','First pass — ').replace('二采_','Second pass — ')
+                    choices.append((key,str(job.get('created',''))+'  ·  '+name+'\n'+prompt))
+            except (OSError,ValueError,TypeError):continue
+        return choices
+    def choose_completed_video(self):
+        dialog=QDialog(self);dialog.setWindowTitle(self.t('从已完成任务选择视频','Choose a video from completed tasks'));dialog.resize(min(720,self.width()-40),min(480,self.height()-60))
+        layout=QVBoxLayout(dialog);layout.setContentsMargins(20,20,20,20);layout.setSpacing(14)
+        layout.addWidget(self.label(self.t('选择一个视频，提取末帧后会自动加入参考图片。','Choose a video. Its last frame will be added to your references.'),'section',True))
+        search=QLineEdit();search.setPlaceholderText(self.t('搜索日期、视频名或描述','Search date, video name or description'));layout.addWidget(search)
+        listing=QListWidget();listing.setMinimumHeight(180);layout.addWidget(listing,1)
+        for path,label in self.completed_video_choices():
+            item=QListWidgetItem(label);item.setData(Qt.ItemDataRole.UserRole,path);item.setSizeHint(QSize(300,72));item.setToolTip(label);listing.addItem(item)
+        layout.addWidget(self.label(self.t('只显示“我的任务”中已完成且已下载的视频；缺失的视频请先重新下载。','Only completed, downloaded videos from My tasks are shown. Download missing files again first.'),'muted',True))
+        if not listing.count():layout.addWidget(self.label(self.t('暂无可用视频。先生成视频，或到“我的任务”继续下载。','No videos available. Generate a video or resume a download in My tasks.'),'muted',True))
+        actions=QHBoxLayout();actions.addStretch();actions.addWidget(self.button(self.t('取消','Cancel'),dialog.reject));result=[]
+        def accept():
+            item=listing.currentItem()
+            if item and not item.isHidden():result.append(item.data(Qt.ItemDataRole.UserRole));dialog.accept()
+        confirm=self.button(self.t('提取并添加','Extract and add'),accept,'primary');confirm.setEnabled(False);actions.addWidget(confirm);layout.addLayout(actions)
+        listing.currentItemChanged.connect(lambda current,previous:confirm.setEnabled(current is not None and not current.isHidden()))
+        listing.itemDoubleClicked.connect(lambda _:accept())
+        def filter_items(text):
+            for i in range(listing.count()):listing.item(i).setHidden(text.casefold() not in listing.item(i).text().casefold())
+            current=listing.currentItem();confirm.setEnabled(current is not None and not current.isHidden())
+        search.textChanged.connect(filter_items);dialog.exec();return result[0] if result else None
     def add_reference_frame(self,path):
         picker=self.pickers['images']
         if len(picker.paths)>=picker.limit:

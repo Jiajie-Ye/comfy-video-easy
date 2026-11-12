@@ -49,7 +49,7 @@ Server node versions must support the input definitions in `engine.py`. **Check 
 
 ## Usage
 
-Use **Last frame** in the image reference card to choose a local video. Its final frame is saved locally and automatically added as a numbered image reference with a thumbnail. The 9-image limit still applies.
+Use **Last frame** in the image reference card, then choose **Choose a local file** or **Choose a completed task**. Completed tasks list downloaded videos directly, with date, filename, description and search—no folder browsing is required. Select a video and choose **Extract and add**. Its final frame is saved locally and automatically added as a numbered image reference with a thumbnail. The 9-image limit still applies.
 
 1. Configure the server and check the connection.
 2. Add references and refer to them as `<Picture 1>`, `<Audio 1>`, or `<Video 1>`. Reordering changes their numbers.

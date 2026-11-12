@@ -85,11 +85,22 @@ class ModernTests(unittest.TestCase):
         self.assertEqual(json.loads((Path(self.tmp.name)/'settings.json').read_text('utf-8'))['config']['images'],[str(p)])
     def test_reference_frame_cancel_and_full_list_do_not_start_worker(self):
         from unittest.mock import patch
-        with patch('modern_app.QFileDialog.getOpenFileName',return_value=('', '')),patch.object(self.w,'start_worker') as worker:
+        with patch.object(self.w,'choose_frame_source',return_value='local'),patch('modern_app.QFileDialog.getOpenFileName',return_value=('', '')),patch.object(self.w,'start_worker') as worker:
             self.w.extract_reference();worker.assert_not_called()
         self.w.pickers['images'].paths=['example.png']*9
         with patch.object(self.w,'info'),patch('modern_app.QFileDialog.getOpenFileName') as dialog:
             self.w.extract_reference();dialog.assert_not_called()
+    def test_completed_choices_exclude_missing_and_unfinished(self):
+        c=E.defaults();c['prompt']='A blue ball';j=E.job_create(self.w.output,c)
+        p=Path(j['folder'])/'result.mp4';p.write_bytes(b'example')
+        j['files']=[str(p),str(p.parent/'missing.mp4')];j['status']='已完成';E.save_job(j)
+        choices=self.w.completed_video_choices();self.assertEqual(len(choices),1);self.assertEqual(Path(choices[0][0]),p.resolve());self.assertIn('A blue ball',choices[0][1])
+        j['status']='已提交';E.save_job(j);self.assertEqual(self.w.completed_video_choices(),[])
+    def test_completed_source_never_opens_file_browser(self):
+        from unittest.mock import patch
+        p=Path(self.tmp.name)/'video.mp4';p.write_bytes(b'example')
+        with patch.object(self.w,'choose_frame_source',return_value='tasks'),patch.object(self.w,'choose_completed_video',return_value=str(p)),patch('modern_app.QFileDialog.getOpenFileName') as browser,patch.object(self.w,'start_worker') as worker:
+            self.w.extract_reference();browser.assert_not_called();worker.assert_called_once()
     def test_round_corners_are_applied(self):self.assertIn('border-radius:12px',self.w.styleSheet())
 
 if __name__=='__main__':unittest.main(verbosity=2)
