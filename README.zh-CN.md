@@ -63,6 +63,8 @@ python modern_app.py
 
 任务、设置和素材路径保存在下文说明的固定工作目录中，升级时保留该目录。它可能含私人 Prompt、服务器地址和素材路径，不应提交到公开仓库。
 
+每张参考图片左侧有 **@** 按钮，点击即可在描述框光标处插入对应的 `<Picture N>`。重新排序后按钮按新编号插入，已写入的文本不会自动改号。
+
 ## 剧本提示词增强
 
 点击描述框下方“剧本提示词增强”，首次填写接口格式、URL、API KEY 和准确模型名；以后直接使用保存的配置。“增强设置”中可随时修改。支持 OpenAI Compatible、OpenAI Responses、Anthropic、Google Gemini，以及使用 Bedrock Bearer API Key 的 Amazon Bedrock Converse（不支持 AWS Access Key 签名认证）。

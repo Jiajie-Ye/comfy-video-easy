@@ -10,6 +10,29 @@ class ModernTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.w=Window(self.tmp.name);self.w.show();APP.processEvents()
     def tearDown(self):
         self.w.busy=False;self.w.close();self.w.deleteLater();APP.processEvents();self.tmp.cleanup()
+    def test_image_reference_button_inserts_at_cursor_and_tracks_order(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+        picker=self.w.pickers['images'];picker.paths=['first.png','second.png'];picker.refresh()
+        self.w.prompt.setPlainText('Before  after');cursor=self.w.prompt.textCursor();cursor.setPosition(7);self.w.prompt.setTextCursor(cursor);self.w.prompt.setFocus();APP.processEvents()
+        button=picker.list.itemWidget(picker.list.item(1)).findChild(QPushButton)
+        QTest.mouseClick(button,Qt.MouseButton.LeftButton)
+        self.assertEqual(self.w.prompt.toPlainText(),'Before <Picture 2> after')
+        self.w.prompt.undo();self.assertEqual(self.w.prompt.toPlainText(),'Before  after')
+        picker.list.setCurrentRow(1);picker.move(-1);self.assertEqual(picker.paths[0],'second.png')
+        picker.list.itemWidget(picker.list.item(0)).findChild(QPushButton).click()
+        self.assertIn('<Picture 1>',self.w.prompt.toPlainText())
+        self.w.toggle_language();picker=self.w.pickers['images'];button=picker.list.itemWidget(picker.list.item(0)).findChild(QPushButton)
+        self.assertIn('Insert image reference',button.toolTip())
+    def test_image_row_still_selects_and_previews(self):
+        from PyQt6.QtCore import Qt,QPoint
+        from PyQt6.QtTest import QTest,QSignalSpy
+        picker=self.w.pickers['images'];picker.paths=['first.png'];picker.refresh();APP.processEvents()
+        item=picker.list.item(0);rect=picker.list.visualItemRect(item);point=QPoint(rect.left()+100,rect.center().y())
+        from unittest.mock import patch
+        with patch.object(self.w,'info'):
+            spy=QSignalSpy(picker.list.itemDoubleClicked);QTest.mouseClick(picker.list.viewport(),Qt.MouseButton.LeftButton,pos=point);QTest.mouseDClick(picker.list.viewport(),Qt.MouseButton.LeftButton,pos=point)
+        self.assertTrue(item.isSelected());self.assertEqual(len(spy),1)
     def test_duration_range_and_language_preservation(self):
         from PyQt6.QtCore import Qt,QPoint,QPointF
         from PyQt6.QtGui import QWheelEvent

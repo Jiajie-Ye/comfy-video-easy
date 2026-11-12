@@ -7,7 +7,7 @@ from PyQt6.QtGui import QDesktopServices, QKeySequence, QShortcut, QImageReader,
 from PyQt6.QtWidgets import (QApplication,QMainWindow,QWidget,QFrame,QVBoxLayout,QHBoxLayout,QGridLayout,
     QLabel,QPushButton,QTextEdit,QLineEdit,QComboBox,QSpinBox,QCheckBox,QListWidget,QListWidgetItem,
     QStackedWidget,QScrollArea,QFileDialog,QMessageBox,QProgressBar,QTableWidget,QTableWidgetItem,
-    QHeaderView,QAbstractItemView,QSizePolicy,QDialog,QDialogButtonBox,QSlider)
+    QHeaderView,QAbstractItemView,QSizePolicy,QDialog,QDialogButtonBox,QSlider,QStyledItemDelegate,QStyleOptionViewItem)
 if sys.platform=='win32':os.environ.setdefault('QT_MEDIA_BACKEND','windows')
 from PyQt6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
@@ -17,7 +17,7 @@ import prompt_enhancer as PE
 import workspaces as WS
 from enhancer_ui import EnhancementSettings,EnhancementReview
 
-VERSION='0.5.1'
+VERSION='0.5.2'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -102,6 +102,13 @@ class ClickOnlyComboBox(QComboBox):
 class Bridge(QObject):
     event=pyqtSignal(str,object)
 
+class ReferenceItemDelegate(QStyledItemDelegate):
+    def updateEditorGeometry(self,editor,option,index):
+        editor.setGeometry(option.rect)
+    def paint(self,painter,option,index):
+        shifted=QStyleOptionViewItem(option);shifted.rect.adjust(38,0,0,0)
+        super().paint(painter,shifted,index)
+
 class Picker(QFrame):
     def __init__(self,app,key,zh,en,tag,limit,pattern):
         super().__init__();self.setObjectName('card');self.app=app;self.key=key;self.tag=tag;self.limit=limit;self.pattern=pattern
@@ -113,7 +120,7 @@ class Picker(QFrame):
         self.empty=app.label(app.t('未选择文件，点击添加','No files yet. Choose Add.'),'muted');v.addWidget(self.empty)
         self.list=QListWidget();self.list.setMaximumHeight(76);self.list.setMinimumHeight(42);self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.list.itemDoubleClicked.connect(self.preview);v.addWidget(self.list)
         if key=='images':
-            self.list.setIconSize(QSize(88,66));self.list.setMinimumHeight(94);self.list.setMaximumHeight(184)
+            self.list.setItemDelegate(ReferenceItemDelegate(self.list));self.list.setIconSize(QSize(88,66));self.list.setMinimumHeight(94);self.list.setMaximumHeight(184)
         h=QHBoxLayout()
         for name,fn in [(app.t('移除','Remove'),self.remove),('↑',lambda:self.move(-1)),('↓',lambda:self.move(1))]:h.addWidget(app.button(name,fn,'quiet'))
         h.addStretch();self.counter=app.label('','muted');h.addWidget(self.counter);v.addLayout(h);self.refresh()
@@ -126,8 +133,17 @@ class Picker(QFrame):
                 pix=self.image(p,176,132)
                 if not pix.isNull():item.setIcon(QIcon(pix))
                 else:item.setText(item.text()+self.app.t('（无法预览）',' (preview unavailable)'))
-                item.setSizeHint(QSize(200,80))
+                item.setSizeHint(QSize(238,80))
+                row=QWidget();row.setObjectName('referenceRow');row.setStyleSheet('QWidget#referenceRow {background:transparent;}');layout=QHBoxLayout(row);layout.setContentsMargins(2,0,0,0)
+                button=self.app.button('@',lambda item=item:self.insert_reference(item),'accent');button.setFixedSize(32,32);button.setStyleSheet('padding:0;min-height:0;font-size:16px;');button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                hint=self.app.t(f'插入图片引用 <{self.tag} {i+1}>',f'Insert image reference <{self.tag} {i+1}>');button.setToolTip(hint);button.setAccessibleName(hint)
+                layout.addWidget(button);layout.addStretch();self.list.setItemWidget(item,row)
         self.empty.setVisible(not self.paths);self.list.setVisible(bool(self.paths));self.counter.setText(f'{len(self.paths)} / {self.limit}')
+    def insert_reference(self,item):
+        index=self.list.row(item)
+        if index<0:return
+        editor=self.app.prompt;cursor=editor.textCursor();cursor.insertText(f'<{self.tag} {index+1}>');editor.setTextCursor(cursor);editor.setFocus();editor.ensureCursorVisible()
+        self.app.save_preferences()
     def add(self):
         files,_=QFileDialog.getOpenFileNames(self,self.app.t('选择参考素材','Choose reference files'),'',self.app.t('媒体文件','Media files')+f' ({self.pattern})')
         result=list(self.paths)

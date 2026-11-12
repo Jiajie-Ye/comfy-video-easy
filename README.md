@@ -63,6 +63,8 @@ You can add up to 9 images, 3 audio clips, and 3 videos. Reference videos must s
 
 Settings, task records and media paths are kept in the persistent workspace described below. Keep this folder when upgrading. It can contain private prompts, server addresses, and media paths and should not be committed to a public repository.
 
+Each image has an **@** button on its left. Click it to insert its current `<Picture N>` reference at the story cursor. Reordering images updates the buttons’ numbers; existing text is not rewritten.
+
 ## Script prompt enhancement
 
 Choose **Enhance prompt** below the story box. First use opens settings for the API type, URL, API key and exact model name. Later clicks reuse that configuration. Supported request adapters: OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic Messages, Gemini generateContent, and Amazon Bedrock Converse with a Bedrock bearer API key (not AWS access-key signing).
