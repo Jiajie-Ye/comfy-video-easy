@@ -62,10 +62,10 @@ def switch_workspace(old,new):
     cfg=json.loads((new/'settings.json').read_text('utf-8')) if existing else dict(old_cfg)
     if not existing and Path(cfg.get('output',old/'视频作品')).resolve()==(old/'视频作品').resolve():cfg['output']=str(new/'视频作品')
     cfg['history_roots']=unique_roots([*old_cfg.get('history_roots',[]),old_cfg.get('output',str(old/'视频作品')),*cfg.get('history_roots',[]),cfg.get('output',str(new/'视频作品'))])
-    for name in ['editing_project.json','enhancer_settings.json']:
+    for name in ['editing_project.json','enhancer_settings.json','image_settings.json','image_draft.json']:
         src=old/name;dest=new/name
         if src.is_file() and not dest.exists():shutil.copy2(src,dest)
-    for name in ['reference_frames','prompt_history','speech_components']:
+    for name in ['reference_frames','prompt_history','speech_components','generated_images']:
         src=old/name;dest=new/name
         if src.is_dir() and not dest.exists():
             with tempfile.TemporaryDirectory(prefix='.workspace-copy-',dir=new) as staging:

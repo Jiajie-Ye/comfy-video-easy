@@ -16,8 +16,9 @@ from editor_ui import Editor
 import prompt_enhancer as PE
 import workspaces as WS
 from enhancer_ui import EnhancementSettings,EnhancementReview
+from image_ui import ImageCreator
 
-VERSION='0.5.4'
+VERSION='0.6.0'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -117,6 +118,7 @@ class Picker(QFrame):
         if key=='images':
             app.reference_frame_button=app.button(app.t('提取末帧','Last frame'),app.extract_reference,'accent');app.reference_frame_button.setToolTip(app.t('选择视频，提取最后一帧并添加为参考图片','Choose a video and add its last frame as a reference'));h.addWidget(app.reference_frame_button)
         h.addWidget(app.button(app.t('+ 添加','+ Add'),self.add,'accent'));v.addLayout(h)
+        if key=='images':v.addWidget(app.button(app.t('人物/场景图像生成','Generate character / scene images'),app.create_reference_image,'accent'))
         self.empty=app.label(app.t('未选择文件，点击添加','No files yet. Choose Add.'),'muted');v.addWidget(self.empty)
         self.list=QListWidget();self.list.setMaximumHeight(76);self.list.setMinimumHeight(42);self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.list.itemDoubleClicked.connect(self.preview);v.addWidget(self.list)
         if key=='images':
@@ -296,6 +298,12 @@ class Window(QMainWindow):
             picker=Picker(self,key,zh,en,tag,limit,pattern);self.pickers[key]=picker;right.addWidget(picker)
         right.addWidget(self.checkbox('video_audio','同时参考视频原声','Use reference video sound'));right.addStretch()
         save=QHBoxLayout();save.addWidget(self.label(self.t('保存到','Save to'),'muted'));self.output_edit=QLineEdit(self.output);save.addWidget(self.output_edit,1);save.addWidget(self.button(self.t('更改','Change'),self.choose_output));v.addLayout(save)
+    def create_reference_image(self):
+        if self.busy:return
+        dialog=ImageCreator(self)
+        if dialog.exec()==QDialog.DialogCode.Accepted and dialog.result_path:
+            picker=self.pickers['images']
+            if dialog.result_path not in picker.paths and len(picker.paths)<picker.limit:picker.paths.append(dialog.result_path);picker.refresh();self.save_preferences()
     def configure_enhancer(self):
         if self.busy:return None
         dialog=EnhancementSettings(self,PE.load_config(self.data))
@@ -722,7 +730,9 @@ def self_test(folder,check_server=False):
         edited=folder/'edited.mp4';X.export_video([clip,clip],edited,(64,64),[dict(start=.1,end=.4,text='Test')],True)
         assert abs(float(E.inspect_video(edited)['format']['duration'])-1)<.2;report['checks'].append('trim_concat_subtitle_export')
         cfg=PE.defaults();cfg.update(url='https://example.invalid/v1',model='test',api_key='test-key')
-        url,headers,body=PE.request_data(cfg,'A person walks into a courtyard.',dict(seconds=10,images=0,audios=0,videos=0));assert url.endswith('/chat/completions');assert cfg['template'];report['checks'].append('enhancer_template_and_payload');w.close()
+        url,headers,body=PE.request_data(cfg,'A person walks into a courtyard.',dict(seconds=10,images=0,audios=0,videos=0));assert url.endswith('/chat/completions');assert cfg['template'];report['checks'].append('enhancer_template_and_payload')
+        import image_service as IS
+        image_paths=IS.save_images(w.data,[E.extract_last_frame(video,folder).read_bytes()]);dialog=ImageCreator(w);assert dialog.results.count()>0 and not dialog.preview.original.isNull();dialog.use_result();assert dialog.result_path==image_paths[0];report['checks'].append('image_generation_save_preview_and_select');w.close()
         if check_server:report['server']=E.Client().json('/system_stats')['system']['comfyui_version']
         report['passed']=True
     except Exception:report['passed']=False;report['error']=traceback.format_exc()

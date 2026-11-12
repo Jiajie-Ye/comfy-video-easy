@@ -80,6 +80,14 @@ The selected generation duration (1–15 seconds) is authoritative, even if the 
 
 API keys are encrypted with Windows DPAPI for the current account. They are not included in task manifests or logs; moving settings to another PC/account requires entering the key again. Compatibility Chat endpoints manage their own output cap; other adapters expose a maximum-output setting. Provider/model support varies. Protocol tests use fixtures; real-provider validation requires your own configuration.
 
+## Character / scene image generation
+
+Choose **Generate character / scene images** in the Images card. In the separate window, write a description and optionally add reference pictures from local files or current video references. First generation asks for an image API type, URL, API key and exact image-model name; later generations reuse this separate configuration. Review the result, enlarge it if needed, then choose **Add to references**. Images are not inserted automatically; the video prompt and first-frame selection remain unchanged.
+
+Supports OpenAI-compatible **Images** endpoints (JSON `/images/generations`; multipart `/images/edits` with references) and Gemini `generateContent` image output. These are image protocols, not arbitrary Chat Completions endpoints. Reference support depends on your model/provider. Request formats follow the [OpenAI image documentation](https://developers.openai.com/api/docs/guides/image-generation) and [Gemini content API](https://ai.google.dev/api/generate-content). A request asks for one image; returned variants can be reviewed. Up to 9 references, at most 25 megapixels per reference and 15 MB total after PNG encoding.
+
+Descriptions and chosen reference image contents are sent to your configured service when you generate. API keys are encrypted with Windows DPAPI in `image_settings.json`, separate from text enhancement. Results stay in `generated_images` in the persistent workspace; the dialog shows the latest 20 images and remembers its draft. Workspace switching copies these settings, drafts and results. Failed requests are not retried automatically. Protocol/UI tests use simulated images; real provider validation requires your own image API configuration.
+
 ## Persistent workspace and old tasks
 
 Versions now share a per-user workspace locator in `%LOCALAPPDATA%/ComfyVideoEasy/workspace.json`. A fresh install defaults to `~/Documents/AI视频助手工作区`; an existing portable data folder beside the EXE is adopted when no locator exists. `--data-dir` is an explicit temporary/advanced override and does not change the locator.
@@ -112,7 +120,7 @@ The directory must contain `ffmpeg.exe`, `ffprobe.exe`, and their required DLLs.
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_modern test_engine test_editing test_enhancer test_workspaces -v
+python -m unittest test_modern test_engine test_editing test_enhancer test_workspaces test_images -v
 ```
 
 Offline tests use a minimal node fixture with private server enumerations removed. They do not establish compatibility with every live-server version and do not submit GPU jobs.

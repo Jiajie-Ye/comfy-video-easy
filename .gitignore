@@ -30,3 +30,7 @@ reference_frames/
 *.bin
 enhancer_settings.json
 prompt_history/
+
+image_settings.json
+image_draft.json
+generated_images/

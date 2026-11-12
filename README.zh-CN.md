@@ -80,6 +80,14 @@ python modern_app.py
 
 API KEY 使用 Windows 当前账号 DPAPI 加密保存，不写入任务记录或日志；换电脑或账号后需重新填写。兼容 Chat 接口由服务商决定输出上限，其他接口提供输出长度设置。各服务商模型支持情况不同，协议测试使用模拟返回；真实调用需要填写自己的接口配置。
 
+## 人物/场景图像生成
+
+在图片卡片点击“人物/场景图像生成”，打开独立窗口填写描述，可从本地或当前视频素材选择参考图片。首次生成会要求填写图像接口格式、URL、API KEY 和准确的图像模型名称，之后沿用保存的配置。右侧预览生成结果，可放大查看，满意后点击“加入参考图片”；不会自动插入，也不会改写视频剧本或改变已有首帧选择。
+
+支持 OpenAI Images 兼容接口（纯文本使用 `/images/generations`，带参考图使用 multipart `/images/edits`）及 Gemini `generateContent` 图像输出。这不是任意 Chat Completions 接口，所选模型须支持图像生成，带参考图还须支持图像输入。请求格式参考 [OpenAI 官方图像文档](https://developers.openai.com/api/docs/guides/image-generation)和 [Gemini 接口文档](https://ai.google.dev/api/generate-content)。每次请求一张图，若接口返回多个结果可选择。最多 9 张参考图，单张不超过 2500 万像素，转成 PNG 后总计不超过 15 MB。
+
+点击生成时会把描述和所选参考图内容发送到配置的服务商。图像密钥以 Windows DPAPI 加密，独立保存在 `image_settings.json`；与提示词增强互不覆盖。生成图片留在固定工作目录的 `generated_images` 中，窗口显示最近 20 张，并记住描述草稿。切换工作目录时会复制设置、草稿和生成结果。失败不自动重试。协议与界面测试使用模拟图片，真实服务商兼容性需用自己的图像接口配置验证。
+
 ## 固定工作目录与旧任务
 
 新版通过 `%LOCALAPPDATA%/ComfyVideoEasy/workspace.json` 记住同一 Windows 用户的工作目录。全新安装默认使用用户文档下的 `AI视频助手工作区`；没有目录记录时，若 EXE 旁存在旧“我的视频数据”，会优先接入。显式 `--data-dir` 参数不修改固定目录记录。
@@ -112,7 +120,7 @@ python build_exe.py
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_modern test_engine test_editing test_enhancer test_workspaces -v
+python -m unittest test_modern test_engine test_editing test_enhancer test_workspaces test_images -v
 ```
 
 离线测试使用最小、去除服务器枚举的节点 fixture，不代表真实服务器所有版本的兼容性，也不会提交 GPU 任务。
