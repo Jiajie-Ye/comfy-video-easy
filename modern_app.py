@@ -17,7 +17,7 @@ import prompt_enhancer as PE
 import workspaces as WS
 from enhancer_ui import EnhancementSettings,EnhancementReview
 
-VERSION='0.5.3'
+VERSION='0.5.4'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}

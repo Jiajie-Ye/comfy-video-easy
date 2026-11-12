@@ -43,6 +43,25 @@ class ModernTests(unittest.TestCase):
         first_button(1).click();self.assertEqual(picker.first_frame,'')
         first_button(0).click();self.w.save_preferences();saved=json.loads((Path(self.tmp.name)/'settings.json').read_text('utf-8'));self.assertEqual(saved['config']['first_frame'],'b.png')
         picker.list.setCurrentRow(0);picker.remove();self.assertEqual(picker.first_frame,'');self.w.capture();self.assertEqual(self.w.config['first_frame'],'')
+    def test_editor_global_seek_maps_trimmed_sources_and_endpoint(self):
+        e=self.w.editor;e.clips=[dict(id='a',path='a.mp4',duration=12.,start=2.,end=7.),dict(id='b',path='b.mp4',duration=12.,start=3.,end=8.33)];e.refresh()
+        self.assertEqual(e.seek.maximum(),10330);self.assertEqual(e.locate(5),(1,3.))
+        e.seek_global(8);self.assertEqual(e.selected,1);self.assertEqual(e.cursor,6.);self.assertEqual(e.seek.value(),8000)
+        e.seek_global(10.33);self.assertAlmostEqual(e.cursor,8.33);self.assertEqual(e.seek.value(),10330);self.assertEqual(e.time.text(),'10.33 / 10.33s')
+        e.position(0);self.assertEqual(e.time.text(),'10.33 / 10.33s')
+        e.seek.setValue(2500);e.flush_scrub();self.assertEqual(e.selected,0);self.assertEqual(e.cursor,4.5)
+    def test_timeline_proportional_drag_image_and_insertion_points(self):
+        e=self.w.editor;e.clips=[dict(id='a',path='a.mp4',duration=2.,start=0.,end=2.),dict(id='b',path='b.mp4',duration=6.,start=0.,end=6.)];e.refresh();timeline=e.timeline;boxes=timeline.boxes()
+        self.assertAlmostEqual(boxes[1][1]/boxes[0][1],3,delta=.03)
+        self.assertEqual(timeline.insertion_slot(-1),0);self.assertEqual(timeline.insertion_slot(sum(boxes[-1])+1),2)
+        pix=timeline.drag_pixmap(0);self.assertFalse(pix.isNull());self.assertEqual(pix.width(),boxes[0][1]);self.assertGreater(pix.toImage().pixelColor(20,20).alpha(),0)
+        e.reorder(0,1);self.assertEqual([c['id'] for c in e.clips],['b','a']);e.undo_change();self.assertEqual([c['id'] for c in e.clips],['a','b'])
+    def test_preview_surface_retains_frame_until_replacement(self):
+        from PyQt6.QtGui import QImage,QColor
+        from PyQt6.QtMultimedia import QVideoFrame
+        e=self.w.editor;image=QImage(20,20,QImage.Format.Format_RGB32);image.fill(QColor('red'));e.video.image=image
+        e.video.show_frame(QVideoFrame());self.assertEqual(e.video.image.pixelColor(10,10),QColor('red'))
+        e.clips=[];e.refresh();self.assertTrue(e.video.image.isNull())
     def test_duration_range_and_language_preservation(self):
         from PyQt6.QtCore import Qt,QPoint,QPointF
         from PyQt6.QtGui import QWheelEvent

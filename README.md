@@ -67,6 +67,9 @@ Each image has an **@** button on its left. Click it to insert its current `<Pic
 
 Use **Set first** beside an image to anchor it at frame 0. Only one image can be selected; click **✓ First** to cancel. Selection follows the file when reordered and clears when removed. The original reference numbering is retained. Both sampling passes use `MiniMaxH3AddGuide`, rebuilt for their own latent resolution. This is model conditioning, not a pasted/replaced frame or a pixel-identical guarantee. Differing aspect ratios are center-cropped. Prompt enhancement receives the selected reference number. The server must provide this node.
 
+
+Editor preview uses the full sequence duration for seeking, including trimmed source offsets. Clip widths are proportional to their duration; dragging shows the clip under the cursor and an insertion marker. When switching sources, the last decoded image remains visible until the next valid frame arrives, avoiding a black flash; a short loading hold may still occur. Export rendering is unchanged.
+
 ## Script prompt enhancement
 
 Choose **Enhance prompt** below the story box. First use opens settings for the API type, URL, API key and exact model name. Later clicks reuse that configuration. Supported request adapters: OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic Messages, Gemini generateContent, and Amazon Bedrock Converse with a Bedrock bearer API key (not AWS access-key signing).
