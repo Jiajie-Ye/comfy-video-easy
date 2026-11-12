@@ -65,6 +65,8 @@ python modern_app.py
 
 每张参考图片左侧有 **@** 按钮，点击即可在描述框光标处插入对应的 `<Picture N>`。重新排序后按钮按新编号插入，已写入的文本不会自动改号。
 
+点击图片旁的 **设为首帧**，将该图作为第 0 帧引导；一次仅选一张，再点 **✓ 首帧** 可取消。排序时跟随文件，删除该图片则清除选择，参考编号保持原顺序。一采、二采分别通过 `MiniMaxH3AddGuide` 按各自分辨率加入引导。这是模型条件控制，不是后期替换第一帧，也不保证逐像素一致；不同画面比例会居中裁剪。提示词增强同步读取首帧编号，服务器须具备此节点。
+
 ## 剧本提示词增强
 
 点击描述框下方“剧本提示词增强”，首次填写接口格式、URL、API KEY 和准确模型名；以后直接使用保存的配置。“增强设置”中可随时修改。支持 OpenAI Compatible、OpenAI Responses、Anthropic、Google Gemini，以及使用 Bedrock Bearer API Key 的 Amazon Bedrock Converse（不支持 AWS Access Key 签名认证）。

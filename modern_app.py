@@ -17,7 +17,7 @@ import prompt_enhancer as PE
 import workspaces as WS
 from enhancer_ui import EnhancementSettings,EnhancementReview
 
-VERSION='0.5.2'
+VERSION='0.5.3'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -106,13 +106,13 @@ class ReferenceItemDelegate(QStyledItemDelegate):
     def updateEditorGeometry(self,editor,option,index):
         editor.setGeometry(option.rect)
     def paint(self,painter,option,index):
-        shifted=QStyleOptionViewItem(option);shifted.rect.adjust(38,0,0,0)
+        shifted=QStyleOptionViewItem(option);shifted.rect.adjust(38,0,-94,0)
         super().paint(painter,shifted,index)
 
 class Picker(QFrame):
     def __init__(self,app,key,zh,en,tag,limit,pattern):
         super().__init__();self.setObjectName('card');self.app=app;self.key=key;self.tag=tag;self.limit=limit;self.pattern=pattern
-        self.paths=list(app.config[key]);v=QVBoxLayout(self);v.setContentsMargins(16,12,16,10);v.setSpacing(5)
+        self.first_frame=app.config.get('first_frame','') if key=='images' else '';self.paths=list(app.config[key]);v=QVBoxLayout(self);v.setContentsMargins(16,12,16,10);v.setSpacing(5)
         h=QHBoxLayout();h.addWidget(app.label(app.t(zh,en),'section'));h.addStretch()
         if key=='images':
             app.reference_frame_button=app.button(app.t('提取末帧','Last frame'),app.extract_reference,'accent');app.reference_frame_button.setToolTip(app.t('选择视频，提取最后一帧并添加为参考图片','Choose a video and add its last frame as a reference'));h.addWidget(app.reference_frame_button)
@@ -120,16 +120,18 @@ class Picker(QFrame):
         self.empty=app.label(app.t('未选择文件，点击添加','No files yet. Choose Add.'),'muted');v.addWidget(self.empty)
         self.list=QListWidget();self.list.setMaximumHeight(76);self.list.setMinimumHeight(42);self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.list.itemDoubleClicked.connect(self.preview);v.addWidget(self.list)
         if key=='images':
-            self.list.setItemDelegate(ReferenceItemDelegate(self.list));self.list.setIconSize(QSize(88,66));self.list.setMinimumHeight(94);self.list.setMaximumHeight(184)
+            self.list.setItemDelegate(ReferenceItemDelegate(self.list));self.list.setIconSize(QSize(72,54));self.list.setMinimumHeight(94);self.list.setMaximumHeight(184)
         h=QHBoxLayout()
         for name,fn in [(app.t('移除','Remove'),self.remove),('↑',lambda:self.move(-1)),('↓',lambda:self.move(1))]:h.addWidget(app.button(name,fn,'quiet'))
         h.addStretch();self.counter=app.label('','muted');h.addWidget(self.counter);v.addLayout(h);self.refresh()
     def refresh(self):
         self.list.clear()
+        if self.first_frame not in self.paths:self.first_frame=''
         if self.key=='images':self.list.setFixedHeight(min(170,max(86,len(self.paths)*82+4)))
         for i,p in enumerate(self.paths):
             item=QListWidgetItem(f'<{self.tag} {i+1}>  {Path(p).name}');item.setToolTip(p);self.list.addItem(item)
             if self.key=='images':
+                item.setText(f'<{self.tag} {i+1}>\n{Path(p).name}')
                 pix=self.image(p,176,132)
                 if not pix.isNull():item.setIcon(QIcon(pix))
                 else:item.setText(item.text()+self.app.t('（无法预览）',' (preview unavailable)'))
@@ -137,8 +139,17 @@ class Picker(QFrame):
                 row=QWidget();row.setObjectName('referenceRow');row.setStyleSheet('QWidget#referenceRow {background:transparent;}');layout=QHBoxLayout(row);layout.setContentsMargins(2,0,0,0)
                 button=self.app.button('@',lambda item=item:self.insert_reference(item),'accent');button.setFixedSize(32,32);button.setStyleSheet('padding:0;min-height:0;font-size:16px;');button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 hint=self.app.t(f'插入图片引用 <{self.tag} {i+1}>',f'Insert image reference <{self.tag} {i+1}>');button.setToolTip(hint);button.setAccessibleName(hint)
-                layout.addWidget(button);layout.addStretch();self.list.setItemWidget(item,row)
+                layout.addWidget(button);layout.addStretch()
+                selected=p==self.first_frame
+                first=self.app.button(self.app.t('✓ 首帧' if selected else '设为首帧','✓ First' if selected else 'Set first'),lambda item=item:self.toggle_first_frame(item),'accent')
+                first.setCheckable(True);first.setChecked(selected);first.setFixedSize(88,32);first.setStyleSheet('padding:0;min-height:0;'+('background:#3478dc;color:white;' if selected else ''));first.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                first.setToolTip(self.app.t('点击取消首帧' if selected else '将此图片作为第 0 帧引导；不同画面比例会居中裁剪','Click to clear the first frame' if selected else 'Anchor this image at frame 0; differing aspect ratios are center-cropped'));first.setAccessibleName(self.app.t(f'图片 {i+1} 首帧选择',f'Picture {i+1} first frame selection'))
+                layout.addWidget(first);self.list.setItemWidget(item,row)
         self.empty.setVisible(not self.paths);self.list.setVisible(bool(self.paths));self.counter.setText(f'{len(self.paths)} / {self.limit}')
+    def toggle_first_frame(self,item):
+        index=self.list.row(item)
+        if index<0:return
+        path=self.paths[index];self.first_frame='' if self.first_frame==path else path;self.refresh();self.app.save_preferences()
     def insert_reference(self,item):
         index=self.list.row(item)
         if index<0:return
@@ -301,6 +312,8 @@ class Window(QMainWindow):
             cfg=self.configure_enhancer()
             if cfg is None:return
         context=dict(seconds=self.controls['seconds'].value(),ratio=self.controls['ratio'].currentData(),**{key:len(value.paths) for key,value in self.pickers.items()})
+        first=self.pickers['images'].first_frame
+        if first in self.pickers['images'].paths:context['first_frame_picture']=self.pickers['images'].paths.index(first)+1
         def work():
             self.emit('pair',(f"正在按 {context['seconds']} 秒增强剧本提示词…",f"Enhancing your prompt for {context['seconds']} seconds…"))
             result=PE.enhance(cfg,draft,context);self.emit('enhanced',dict(draft=draft,result=result,seconds=context['seconds']))
@@ -460,7 +473,7 @@ class Window(QMainWindow):
         if self.busy or self.editor.busy:return
         j=self.selected_job()
         if j:
-            self.capture();self.config=copy.deepcopy(j['settings']);self.config['fixed']=True;self.config['second_fixed']=True;self.page=0;self.build()
+            self.capture();self.config=E.defaults();self.config.update(copy.deepcopy(j['settings']));self.config['fixed']=True;self.config['second_fixed']=True;self.page=0;self.build()
     def refine(self):
         if self.busy:return
         j=self.selected_job()
@@ -585,6 +598,7 @@ class Window(QMainWindow):
             self.config[key]=w.isChecked() if isinstance(w,QCheckBox) else (w.value() if isinstance(w,QSpinBox) else (w.currentData() if isinstance(w,QComboBox) else w.text()))
         self.config['prompt']=self.prompt.toPlainText()
         for key,w in self.pickers.items():self.config[key]=list(w.paths)
+        self.config['first_frame']=self.pickers['images'].first_frame
         self.output=self.output_edit.text();self.tool_video=self.video_edit.text();self.tool_dir=self.dir_edit.text()
     def typed_config(self):
         c=copy.deepcopy(self.config)

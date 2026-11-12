@@ -73,8 +73,12 @@ def request_data(c,draft,context):
     seconds=context.get('seconds')
     if type(seconds) is not int or not 1<=seconds<=15:raise EnhancementError('Choose a duration from 1 to 15 seconds / 请设置 1–15 秒的生成时长')
     system=SYSTEM+f'''\nAUTHORITATIVE TIMING: The current UI target is exactly {seconds} seconds. This overrides any duration or timestamps in the story or reference format. Never ask the user to supply a duration. Explicitly state Duration: {seconds} seconds in the result. Build a feasible shot schedule starting at 0 seconds and ending at exactly {seconds} seconds, with no gaps or overlaps. Adapt shot count and pacing to this budget; simplify secondary action rather than extending the clip. Preserve core action, action order and ending. Keep Chinese dialogue verbatim and allow realistic speaking time; if it cannot fit, flag that timing conflict in the Audio Direction instead of promising it fits or silently changing the duration. Check all shot boundaries before returning the prompt.'''
+    first=context.get('first_frame_picture')
+    if first is not None:
+        if type(first) is not int or not 1<=first<=context.get('images',0):raise EnhancementError('Invalid first-frame reference / 首帧参考编号无效')
+        system+=f'\nThe UI has explicitly selected <Picture {first}> as the first-frame guide. This takes priority over conflicting opening-image assignments in the draft/template. Start with its pose and composition, then describe subsequent motion; preserve other reference identities and do not invent unseen visual details.'
     # Only the following context fields leave the device; no paths, media or server settings.
-    safe={k:context[k] for k in ('seconds','ratio','images','audios','videos') if k in context}
+    safe={k:context[k] for k in ('seconds','ratio','images','audios','videos','first_frame_picture') if k in context}
     user=json.dumps(dict(story=draft,video_context=safe,reference_format=c['template']),ensure_ascii=False)
     headers={'Content-Type':'application/json'};kind=c['kind'];key=c.get('api_key','');model=c['model'].strip();n=int(c['max_tokens'])
     if kind in ('chat','responses','bedrock') and key:headers['Authorization']='Bearer '+key

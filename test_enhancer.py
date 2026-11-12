@@ -36,6 +36,10 @@ class EnhancerTests(unittest.TestCase):
     def test_missing_or_invalid_duration_is_rejected(self):
         for seconds in (None,0,16,True,5.5,'10'):
             with self.assertRaises(P.EnhancementError):P.request_data(self.config(),'story',dict(seconds=seconds))
+    def test_first_frame_choice_is_in_enhancement_instructions(self):
+        _,_,body=P.request_data(self.config(),'Begin with Picture 1',dict(seconds=5,images=3,first_frame_picture=3))
+        self.assertIn('<Picture 3> as the first-frame guide',body['messages'][0]['content'])
+        with self.assertRaises(P.EnhancementError):P.request_data(self.config(),'story',dict(seconds=5,images=2,first_frame_picture=3))
     def test_secret_safe_errors_and_redirects(self):
         c=self.config();response=Mock(status_code=401,text='test-private-key');session=Mock();session.post.return_value=response
         with self.assertRaises(P.EnhancementError) as error:P.enhance(c,'story',{'seconds':10},session)

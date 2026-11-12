@@ -65,6 +65,8 @@ Settings, task records and media paths are kept in the persistent workspace desc
 
 Each image has an **@** button on its left. Click it to insert its current `<Picture N>` reference at the story cursor. Reordering images updates the buttons’ numbers; existing text is not rewritten.
 
+Use **Set first** beside an image to anchor it at frame 0. Only one image can be selected; click **✓ First** to cancel. Selection follows the file when reordered and clears when removed. The original reference numbering is retained. Both sampling passes use `MiniMaxH3AddGuide`, rebuilt for their own latent resolution. This is model conditioning, not a pasted/replaced frame or a pixel-identical guarantee. Differing aspect ratios are center-cropped. Prompt enhancement receives the selected reference number. The server must provide this node.
+
 ## Script prompt enhancement
 
 Choose **Enhance prompt** below the story box. First use opens settings for the API type, URL, API key and exact model name. Later clicks reuse that configuration. Supported request adapters: OpenAI-compatible Chat Completions, OpenAI Responses, Anthropic Messages, Gemini generateContent, and Amazon Bedrock Converse with a Bedrock bearer API key (not AWS access-key signing).

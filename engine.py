@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 import requests
 
 SERVER = 'http://127.0.0.1:8188'
-APP_VERSION = '0.5.2'
+APP_VERSION = '0.5.3'
 RATIOS = {'横屏 16:9':'16:9 (Widescreen)', '竖屏 9:16':'9:16 (Portrait Widescreen)', '方形 1:1':'1:1 (Square)', '竖图 2:3':'2:3 (Portrait Photo)'}
 MAX_SEED = 2**53-1
 
@@ -24,7 +24,7 @@ def defaults():
                 steps=8, sampler='euler', scheduler='beta', denoise=1., fixed=False, seed=12345,
                 second=False, second_mp=.8, second_steps=4, second_denoise=.2,
                 second_fixed=True, second_seed=12345, ref_size='max', resize='lanczos',
-                video_audio=False, images=[], audios=[], videos=[])
+                video_audio=False, first_frame='', images=[], audios=[], videos=[])
 
 def validate_settings(c):
     if urlparse(c['server']).scheme not in ('http','https') or not urlparse(c['server']).hostname:
@@ -38,6 +38,7 @@ def validate_settings(c):
         if not 0<=int(c[key])<=MAX_SEED: raise ValueError('种子必须为 0 到 9007199254740991 的整数。')
     for key,limit in [('images',9),('audios',3),('videos',3)]:
         if len(c[key])>limit: raise ValueError(f'{key} 最多 {limit} 个文件。')
+    if c.get('first_frame') and c['first_frame'] not in c['images']:raise ValueError('首帧图片已不在参考图片列表中，请重新选择。 / First-frame image is missing from references.')
     if c['ref_size'] not in ('match','max'): raise ValueError('参考图尺寸模式无效。')
     if c['resize'] not in ('lanczos','bicubic','nvidia_rtx_vsr'): raise ValueError('二采缩放算法无效。')
 
@@ -87,6 +88,13 @@ def build_prompt(c, uploaded, job_id, profile=None):
         if c['video_audio']: refs[f'ref_video_audios.ref_video_audio_{i}']=[str(1200+i),2]
     cond=add(108,'MiniMaxH3ReferenceToVideo',clip=clip,vae=vvae,audio_vae=avae,prompt=c['prompt'],
              width=['105',0],height=['105',1],length=frame_count(c['seconds']),ref_image_size=c['ref_size'],**refs)
+    base_cond=cond
+    first_index=None
+    if c.get('first_frame'):
+        if c['first_frame'] not in c['images']:raise ValueError('首帧图片不在参考列表中 / First-frame image is missing')
+        first_index=c['images'].index(c['first_frame'])
+        if first_index>=len(uploaded.get('images',[])):raise ValueError('首帧图片尚未上传 / First-frame image was not uploaded')
+        cond=add(109,'MiniMaxH3AddGuide',positive=base_cond,latent=['108',1],vae=vvae,image=[str(1000+first_index*2),0],frame_idx=0)
     noise=add(243,'RandomNoise',noise_seed=int(c['seed']))
     guider=add(246,'BasicGuider',model=model,conditioning=cond)
     sampler=add(249,'KSamplerSelect',sampler_name=c['sampler'])
@@ -108,7 +116,9 @@ def build_prompt(c, uploaded, job_id, profile=None):
         al=add(288,'VAEEncodeAudio',audio=audio,vae=avae)
         joined=add(293,'PT_H3ConcatAVLatent',video_latent=vl,audio_latent=al)
         noise2=add(300,'RandomNoise',noise_seed=int(c['second_seed']))
-        guide2=add(294,'BasicGuider',model=base,conditioning=cond)
+        second_cond=base_cond
+        if first_index is not None:second_cond=add(299,'MiniMaxH3AddGuide',positive=base_cond,latent=joined,vae=vvae,image=[str(1000+first_index*2),0],frame_idx=0)
+        guide2=add(294,'BasicGuider',model=base,conditioning=second_cond)
         sampler2=add(289,'KSamplerSelect',sampler_name=c['sampler'])
         sched2=add(290,'BasicScheduler',model=base,scheduler=c['scheduler'],steps=int(c['second_steps']),denoise=float(c['second_denoise']))
         latent2=add(295,'SamplerCustomAdvanced',noise=noise2,guider=guide2,sampler=sampler2,sigmas=sched2,latent_image=joined)

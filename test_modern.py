@@ -33,6 +33,16 @@ class ModernTests(unittest.TestCase):
         with patch.object(self.w,'info'):
             spy=QSignalSpy(picker.list.itemDoubleClicked);QTest.mouseClick(picker.list.viewport(),Qt.MouseButton.LeftButton,pos=point);QTest.mouseDClick(picker.list.viewport(),Qt.MouseButton.LeftButton,pos=point)
         self.assertTrue(item.isSelected());self.assertEqual(len(spy),1)
+    def test_first_frame_selection_moves_persists_and_clears(self):
+        picker=self.w.pickers['images'];picker.paths=['a.png','b.png'];picker.refresh()
+        def first_button(row):return picker.list.itemWidget(picker.list.item(row)).findChildren(QPushButton)[1]
+        first_button(1).click();self.assertEqual(picker.first_frame,'b.png');self.assertTrue(first_button(1).isChecked())
+        picker.list.setCurrentRow(1);picker.move(-1);self.assertEqual(picker.first_frame,'b.png');self.assertTrue(first_button(0).isChecked())
+        self.w.toggle_language();picker=self.w.pickers['images'];self.assertEqual(picker.first_frame,'b.png');self.assertTrue(first_button(0).isChecked())
+        first_button(1).click();self.assertEqual(picker.first_frame,'a.png');self.assertFalse(first_button(0).isChecked())
+        first_button(1).click();self.assertEqual(picker.first_frame,'')
+        first_button(0).click();self.w.save_preferences();saved=json.loads((Path(self.tmp.name)/'settings.json').read_text('utf-8'));self.assertEqual(saved['config']['first_frame'],'b.png')
+        picker.list.setCurrentRow(0);picker.remove();self.assertEqual(picker.first_frame,'');self.w.capture();self.assertEqual(self.w.config['first_frame'],'')
     def test_duration_range_and_language_preservation(self):
         from PyQt6.QtCore import Qt,QPoint,QPointF
         from PyQt6.QtGui import QWheelEvent

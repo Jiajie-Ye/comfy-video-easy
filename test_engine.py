@@ -7,6 +7,22 @@ class EngineTests(unittest.TestCase):
         self.c=E.defaults();self.c['prompt']='A blue ball on a table.'
         self.profile=E.model_profile()
         self.schema=json.loads((Path(__file__).parent/'tests/fixtures/node_schema.json').read_text('utf-8'))
+    def test_first_frame_guides_both_passes_without_changing_reference_order(self):
+        self.c.update(images=['a.png','b.png','c.png'],first_frame='c.png',second=True)
+        self.schema['LoadImage']['input']['required']['image'][0].extend(['up_a.png','up_b.png','up_c.png'])
+        E.validate_settings(self.c);p=E.build_prompt(self.c,{'images':['up_a.png','up_b.png','up_c.png']},'test',self.profile)
+        self.assertEqual(p['108']['inputs']['ref_images.ref_image_2'],['1005',0])
+        self.assertEqual(p['109']['inputs']['image'],['1004',0]);self.assertEqual(p['109']['inputs']['frame_idx'],0)
+        self.assertEqual(p['246']['inputs']['conditioning'],['109',0]);self.assertEqual(p['247']['inputs']['latent_image'],['108',1])
+        self.assertEqual(p['299']['inputs']['positive'],['108',0]);self.assertEqual(p['299']['inputs']['latent'],['293',0]);self.assertEqual(p['294']['inputs']['conditioning'],['299',0])
+        E.validate_graph(p,self.schema)
+        self.c['images']=['c.png','a.png','b.png'];p=E.build_prompt(self.c,{'images':['up_c.png','up_a.png','up_b.png']},'test',self.profile)
+        self.assertEqual(p['109']['inputs']['image'],['1000',0])
+    def test_missing_first_frame_fails_without_silent_fallback(self):
+        self.c['first_frame']='missing.png'
+        with self.assertRaises(ValueError):E.validate_settings(self.c)
+        self.c['images']=['missing.png']
+        with self.assertRaises(ValueError):E.build_prompt(self.c,{},'test',self.profile)
     def test_frames_follow_source_alignment(self):
         self.assertEqual(E.frame_count(10),243)
         for seconds in (5,8,10,12,15):
