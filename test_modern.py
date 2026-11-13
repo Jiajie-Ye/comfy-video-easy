@@ -99,13 +99,22 @@ class ModernTests(unittest.TestCase):
         spin.setFocus();QTest.keyClick(spin,Qt.Key.Key_Down);self.assertEqual(spin.value(),3)
         self.w.toggle_language();self.assertEqual(self.w.controls['seconds'].value(),3)
         self.w.capture();self.assertEqual(self.w.typed_config()['seconds'],3)
-    def test_result_buttons_share_task_action_row(self):
-        w=self.w;w.stack.setCurrentIndex(1);APP.processEvents()
-        folder=next(b for b in w.findChildren(QPushButton) if b.text()=='打开文件夹')
-        self.assertEqual(w.play_button.geometry().y(),folder.geometry().y())
-        self.assertEqual(w.frame_button.geometry().y(),folder.geometry().y())
-        self.assertGreater(w.play_button.geometry().x(),folder.geometry().x())
-        self.assertGreater(w.frame_button.geometry().x(),w.play_button.geometry().x())
+    def test_task_library_is_left_of_preview(self):
+        from PyQt6.QtCore import QPoint
+        w=self.w;w.navigate(1);APP.processEvents()
+        left=w.table.mapTo(w,QPoint(0,0));right=w.preview_panel.mapTo(w,QPoint(0,0))
+        self.assertLess(left.x(),right.x());self.assertLessEqual(left.x()+w.table.width(),right.x())
+        self.assertTrue(w.preview_panel.isAncestorOf(w.play_button));self.assertTrue(w.preview_panel.isAncestorOf(w.frame_button))
+        item,_=w.table.add_card(dict(id='hover'), 'time\nCompleted','long prompt must never show',w.data/'task_thumbnails')
+        self.assertEqual(item.toolTip(),'')
+    def test_manual_preview_play_restores_sound(self):
+        from unittest.mock import patch
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtMultimedia import QMediaPlayer
+        w=self.w;w.audio.setMuted(True);w.task_preview_pending=True
+        with patch.object(w.player,'source',return_value=QUrl.fromLocalFile('example.mp4')),patch.object(w.player,'playbackState',return_value=QMediaPlayer.PlaybackState.PlayingState),patch.object(w.player,'play') as play,patch.object(w.player,'pause') as pause:
+            w.toggle_playback();play.assert_called_once();pause.assert_not_called()
+        self.assertFalse(w.audio.isMuted());self.assertFalse(w.task_preview_pending)
     def test_toggle_preserves_all_inputs_and_tool_state(self):
         w=self.w;w.prompt.setPlainText('Scene description\n“你好！”');w.pickers['images'].paths=['C:/ref/b.png','C:/ref/a.png'];w.pickers['images'].refresh()
         w.controls['seed'].setText('9007199254740990');w.controls['fixed'].setChecked(True);w.video_edit.setText('C:/videos/a.mp4');w.dir_edit.setText('C:/frames')

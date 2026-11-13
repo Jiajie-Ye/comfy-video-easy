@@ -19,7 +19,7 @@ from enhancer_ui import EnhancementSettings,EnhancementReview,ReferenceReview
 from image_ui import ImageCreator
 from task_gallery import TaskGallery
 
-VERSION='0.6.4'
+VERSION='0.6.5'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -423,21 +423,24 @@ class Window(QMainWindow):
         self.section(v,self.t('服务器','Server'));v.addWidget(self.entry('server'));v.addWidget(self.label(self.t('填写你自己的 ComfyUI 地址；支持本机、局域网或 Tailscale。','Enter your own ComfyUI URL: local, LAN, or Tailscale.'),'muted'))
     def history_page(self,v):
         v.setSpacing(10)
-        h=QHBoxLayout();h.addWidget(self.label(self.t('最近的创作','Recent creations'),'section'));h.addStretch();h.addWidget(self.button(self.t('导入旧任务','Import old tasks'),self.import_history));h.addWidget(self.button(self.t('刷新','Refresh'),self.refresh_history));v.addLayout(h)
-        self.table=TaskGallery();self.table.itemSelectionChanged.connect(self.select_job);v.addWidget(self.table)
-        h=QHBoxLayout()
-        for zh,en,fn in [('继续查询 / 下载','Resume / download',self.resume),('用这条做二采','Refine this result',self.refine),('载入参数','Load settings',self.load_job),('打开文件夹','Open folder',self.open_folder)]:h.addWidget(self.button(self.t(zh,en),fn))
-        h.addStretch();self.play_button=self.button(self.t('播放视频','Play video'),self.play);self.frame_button=self.button(self.t('提取末帧','Extract last frame'),self.extract_result);h.addWidget(self.play_button);h.addWidget(self.frame_button);v.addLayout(h)
-        lower=QHBoxLayout();left=QVBoxLayout();lower.addLayout(left,4)
-        self.details=self.label(self.t('选择一条任务，查看参数与结果。','Select a task to see its settings and results.'),'muted',True);self.details.setMaximumHeight(110);self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);left.addWidget(self.details)
-        self.files=QListWidget();self.files.setMinimumHeight(100);self.files.itemDoubleClicked.connect(lambda _:self.play());self.files.currentItemChanged.connect(lambda *_:self.preview_selected_file());left.addWidget(self.files,1)
+        columns=QHBoxLayout();columns.setSpacing(18);v.addLayout(columns,1)
+        library=QWidget();left=QVBoxLayout(library);left.setContentsMargins(0,0,0,0);left.setSpacing(10);columns.addWidget(library,1)
+        h=QHBoxLayout();h.addWidget(self.label(self.t('最近的创作','Recent creations'),'section'));h.addStretch();left.addLayout(h)
+        h=QHBoxLayout();h.addWidget(self.button(self.t('导入旧任务','Import old tasks'),self.import_history));h.addWidget(self.button(self.t('刷新','Refresh'),self.refresh_history));h.addStretch();left.addLayout(h)
+        self.table=TaskGallery();self.table.setMinimumHeight(250);self.table.setMaximumHeight(16777215);self.table.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Expanding);self.table.itemSelectionChanged.connect(self.select_job);left.addWidget(self.table,1)
+        actions=QGridLayout()
+        for i,(zh,en,fn) in enumerate([('继续查询 / 下载','Resume / download',self.resume),('用这条做二采','Refine this result',self.refine),('载入参数','Load settings',self.load_job),('打开文件夹','Open folder',self.open_folder)]):actions.addWidget(self.button(self.t(zh,en),fn),i//2,i%2)
+        left.addLayout(actions)
         self.preview_panel=QFrame();self.preview_panel.setObjectName('card');panel=QVBoxLayout(self.preview_panel);panel.setContentsMargins(12,10,12,10)
         heading=QHBoxLayout();heading.addWidget(self.label(self.t('视频预览','Video preview'),'section'));heading.addStretch();heading.addWidget(self.button(self.t('系统播放器 ↗','System player ↗'),self.play_external,'quiet'));panel.addLayout(heading)
         self.video_widget=QVideoWidget();self.video_widget.setMinimumSize(240,120);self.video_widget.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Expanding);self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio);self.video_widget.videoSink().videoFrameChanged.connect(self.task_preview_frame);panel.addWidget(self.video_widget,1);self.player.setVideoOutput(self.video_widget)
         self.media_note=self.label(Path(self.player.source().toLocalFile()).name if not self.player.source().isEmpty() else self.t('选择结果后点击“播放视频”','Select a result and choose Play video'),'muted',True);panel.addWidget(self.media_note)
         controls=QHBoxLayout();self.pause_button=self.button(self.t('播放','Play'),self.toggle_playback,'quiet');controls.addWidget(self.pause_button)
         self.seek=QSlider(Qt.Orientation.Horizontal);self.seek.setRange(0,self.player.duration());self.seek.sliderMoved.connect(self.player.setPosition);controls.addWidget(self.seek,1);self.media_time=self.label('00:00 / 00:00','muted');controls.addWidget(self.media_time);panel.addLayout(controls)
-        lower.addWidget(self.preview_panel,5);v.addLayout(lower,1)
+        self.files=QListWidget();self.files.setMinimumHeight(48);self.files.setMaximumHeight(70);self.files.itemDoubleClicked.connect(lambda _:self.play());self.files.currentItemChanged.connect(lambda *_:self.preview_selected_file());panel.addWidget(self.files)
+        self.details=self.label(self.t('选择左侧任务，查看视频与参数。','Select a task on the left to preview it.'),'muted',True);self.details.setMaximumHeight(60);self.details.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);panel.addWidget(self.details)
+        h=QHBoxLayout();self.play_button=self.button(self.t('播放视频','Play video'),self.play);self.frame_button=self.button(self.t('提取末帧','Extract last frame'),self.extract_result);h.addWidget(self.play_button);h.addWidget(self.frame_button);panel.addLayout(h)
+        columns.addWidget(self.preview_panel,1)
     def update_playback(self,*_):
         if not hasattr(self,'seek'):return
         self.seek.setRange(0,self.player.duration());self.seek.setEnabled(self.player.isSeekable())
@@ -449,8 +452,10 @@ class Window(QMainWindow):
         self.media_note.setText(self.t('无法内嵌播放，请尝试右上角“系统播放器”。','Cannot play here. Try System player at the top right.'))
         self.media_note.setToolTip(self.player.errorString())
     def toggle_playback(self):
+        # A manual play request must leave the silent first-frame preview mode.
+        previewing=self.task_preview_pending;self.task_preview_pending=False;self.audio.setMuted(False)
         if self.player.source().isEmpty():self.play()
-        elif self.player.playbackState()==QMediaPlayer.PlaybackState.PlayingState:self.player.pause()
+        elif self.player.playbackState()==QMediaPlayer.PlaybackState.PlayingState and not previewing:self.player.pause()
         else:self.player.play()
     def play_external(self):
         p=self.player.source().toLocalFile() or self.chosen_file()
@@ -464,7 +469,7 @@ class Window(QMainWindow):
                 if j['id'] in self.jobs:continue
                 j['folder']=str(f.parent);self.jobs[j['id']]=j
                 text=j['created']+'\n'+self.translate_status(j['status'])
-                tooltip=text+'\n'+str(j['settings'].get('prompt',''))
+                tooltip=''
                 item,request=self.table.add_card(j,text,tooltip,self.data/'task_thumbnails')
                 if request:pending.append(request)
                 if j['id']==self.selected_id:self.table.setCurrentItem(item)

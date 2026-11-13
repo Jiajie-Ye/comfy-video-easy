@@ -42,7 +42,7 @@ class TaskGallery(QListWidget):
     def reset_cards(self):
         self.stop_loading();self.cancel=threading.Event();self.clear();self.cards={}
     def add_card(self,job,text,tooltip,cache):
-        item=QListWidgetItem(self.placeholder,text);item.setData(Qt.ItemDataRole.UserRole,job['id']);item.setToolTip(tooltip);item.setSizeHint(QSize(180,136));self.addItem(item)
+        item=QListWidgetItem(self.placeholder,text);item.setData(Qt.ItemDataRole.UserRole,job['id']);item.setSizeHint(QSize(180,136));self.addItem(item)
         video=next((Path(f) for f in reversed(job.get('files',[])) if Path(f).is_file() and Path(f).suffix.lower() in ('.mp4','.mov','.mkv','.webm','.avi')),None)
         if video is None:return item,None
         try:
