@@ -12,7 +12,7 @@ Prompt enhancement now first asks the configured model to map story entities to 
 
 ## Download for Windows
 
-Download **AI视频助手_0.6.8_Windows.zip** from [Releases](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest), extract it, then double-click **AI视频助手.exe**. No Python installation is required. The public build contains no personal server address, API credentials or task history. Configure your own ComfyUI server under Settings, and optional model APIs in their respective settings. GitHub’s **Source code** downloads are for developers and require the Python setup below.
+Download **ComfyVideoEasy_0.6.8_Windows.zip** from [Releases](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest), extract it, then double-click **AI视频助手.exe**. No Python installation is required. The public build contains no personal server address, API credentials or task history. Configure your own ComfyUI server under Settings, and optional model APIs in their respective settings. GitHub’s **Source code** downloads are for developers and require the Python setup below.
 
 ## Features
 
