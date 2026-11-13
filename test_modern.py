@@ -123,7 +123,7 @@ class ModernTests(unittest.TestCase):
         w.on_event('idle',None);self.assertTrue(w.run.isEnabled())
     def test_history_language_and_selection_survive_switch(self):
         w=self.w;c=E.defaults();c['prompt']='A ball';j=E.job_create(w.output,c);j['status']='已完成';E.save_job(j);w.selected_id=j['id'];w.refresh_history()
-        self.assertEqual(w.selected_job()['id'],j['id']);w.toggle_language();self.assertEqual(w.table.item(0,1).text(),'Completed');self.assertEqual(w.selected_job()['id'],j['id'])
+        self.assertEqual(w.selected_job()['id'],j['id']);w.toggle_language();self.assertIn('Completed',w.table.item(0).text());self.assertEqual(w.selected_job()['id'],j['id'])
         w.load_job();self.assertTrue(w.controls['fixed'].isChecked())
     def test_english_navigation_and_buttons_do_not_keep_chinese_labels(self):
         self.w.toggle_language();APP.processEvents()
@@ -200,6 +200,14 @@ class ModernTests(unittest.TestCase):
     def test_editor_draft_survives_language_and_undo(self):
         editor=self.w.editor;editor.clips=[dict(id='a',path='example.mp4',duration=8.,start=0.,end=8.)];editor.selected=0;editor.refresh();editor.cursor=3.;editor.split();self.assertEqual(len(editor.clips),2);editor.undo_change();self.assertEqual(len(editor.clips),1);editor.save()
         self.w.toggle_language();self.assertEqual(len(self.w.editor.clips),1);self.assertEqual(self.w.editor.clips[0]['end'],8.)
+    def test_task_gallery_many_jobs_and_selection(self):
+        from PyQt6.QtCore import Qt
+        for n in range(24):
+            c=E.defaults();c['prompt']=f'Gallery task {n}';j=E.job_create(self.w.output,c);j['id']=f'gallery-{n}';E.save_job(j)
+        self.w.refresh_history();self.assertEqual(self.w.table.count(),24)
+        item=self.w.table.item(17);self.w.table.setCurrentItem(item)
+        self.assertEqual(self.w.selected_job()['id'],item.data(Qt.ItemDataRole.UserRole))
+        selected=self.w.selected_id;self.w.refresh_history();self.assertEqual(self.w.selected_job()['id'],selected)
     def test_enhance_first_use_cancel_preserves_draft(self):
         from unittest.mock import patch
         self.w.prompt.setPlainText('一个人走进庭院')

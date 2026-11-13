@@ -34,3 +34,5 @@ prompt_history/
 image_settings.json
 image_draft.json
 generated_images/
+
+task_thumbnails/

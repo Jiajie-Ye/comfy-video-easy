@@ -17,8 +17,9 @@ import prompt_enhancer as PE
 import workspaces as WS
 from enhancer_ui import EnhancementSettings,EnhancementReview,ReferenceReview
 from image_ui import ImageCreator
+from task_gallery import TaskGallery
 
-VERSION='0.6.3'
+VERSION='0.6.4'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -85,7 +86,7 @@ QPushButton#accent {background:#e8f1ff;color:#245eab;border:1px solid #bcd3f5;bo
 QPushButton#accent:hover {background:#d8e8ff;border-color:#90b6ec;}
 QPushButton#accent:disabled {background:#f2f5fa;color:#97a7bb;border-color:#e0e7f1;}
 '''
-NAMES=[('制作视频','Create video'),('我的任务','My tasks'),('末帧工具','Last frame'),('高级设置','Settings'),('使用指南','Guide'),('视频剪辑','Video editor')]
+NAMES=[('制作视频','Create video'),('我的任务','My tasks'),('工具仓库','Toolbox'),('高级设置','Settings'),('使用指南','Guide'),('视频剪辑','Video editor')]
 RATIO_EN={'横屏 16:9':'Landscape 16:9','竖屏 9:16':'Portrait 9:16','方形 1:1':'Square 1:1','竖图 2:3':'Portrait 2:3'}
 STATUS={
  '准备中':'Preparing','提交中':'Submitting','已提交':'Submitted','已完成':'Completed','生成失败':'Failed',
@@ -232,6 +233,7 @@ class Window(QMainWindow):
         if hasattr(self,'editor'):
             if self.editor.busy:return
             self.editor.pause();self.editor.save()
+        if hasattr(self,'table'):self.table.stop_loading()
         old=self.takeCentralWidget()
         if old:old.deleteLater()
         root=QWidget();self.setCentralWidget(root);outer=QHBoxLayout(root);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
@@ -260,7 +262,7 @@ class Window(QMainWindow):
         if hasattr(self,'editor') and i!=5:self.editor.pause()
         if hasattr(self,'run'):self.run.setVisible(i!=5)
         self.stack.setCurrentIndex(i);self.title.setText(self.t(*NAMES[i]))
-        subtitles=[('把想法写下来，让画面开始发生。','Describe your idea. Bring it to life.'),('每一次创作，都有迹可循。','Your generations, settings and results in one place.'),('将视频的最后一帧，留给下一个镜头。','Keep the final frame for your next shot.'),('按你的创作习惯，调整每一处细节。','Fine-tune your generation preferences.'),('从第一段视频开始。','Start with your first video.'),('把镜头拼成故事，裁剪、排序并导出。','Trim, arrange and export your story.')]
+        subtitles=[('把想法写下来，让画面开始发生。','Describe your idea. Bring it to life.'),('每一次创作，都有迹可循。','Your generations, settings and results in one place.'),('实用创作工具，集中在这里。','Useful tools for your creative workflow.'),('按你的创作习惯，调整每一处细节。','Fine-tune your generation preferences.'),('从第一段视频开始。','Start with your first video.'),('把镜头拼成故事，裁剪、排序并导出。','Trim, arrange and export your story.')]
         self.subtitle.setText(self.t(*subtitles[i]))
         for n,b in enumerate(self.nav):b.setChecked(n==i)
     def editor_page(self,v):
@@ -422,7 +424,7 @@ class Window(QMainWindow):
     def history_page(self,v):
         v.setSpacing(10)
         h=QHBoxLayout();h.addWidget(self.label(self.t('最近的创作','Recent creations'),'section'));h.addStretch();h.addWidget(self.button(self.t('导入旧任务','Import old tasks'),self.import_history));h.addWidget(self.button(self.t('刷新','Refresh'),self.refresh_history));v.addLayout(h)
-        self.table=QTableWidget(0,3);self.table.setHorizontalHeaderLabels([self.t('时间','Created'),self.t('状态','Status'),self.t('实际一采种子','Actual first-pass seed')]);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch);self.table.verticalHeader().hide();self.table.verticalHeader().setDefaultSectionSize(48);self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows);self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection);self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers);self.table.setShowGrid(False);self.table.setMinimumHeight(120);self.table.setMaximumHeight(150);self.table.itemSelectionChanged.connect(self.select_job);v.addWidget(self.table)
+        self.table=TaskGallery();self.table.itemSelectionChanged.connect(self.select_job);v.addWidget(self.table)
         h=QHBoxLayout()
         for zh,en,fn in [('继续查询 / 下载','Resume / download',self.resume),('用这条做二采','Refine this result',self.refine),('载入参数','Load settings',self.load_job),('打开文件夹','Open folder',self.open_folder)]:h.addWidget(self.button(self.t(zh,en),fn))
         h.addStretch();self.play_button=self.button(self.t('播放视频','Play video'),self.play);self.frame_button=self.button(self.t('提取末帧','Extract last frame'),self.extract_result);h.addWidget(self.play_button);h.addWidget(self.frame_button);v.addLayout(h)
@@ -455,23 +457,25 @@ class Window(QMainWindow):
         if p:self.player.pause();self.open_path(p)
     def refresh_history(self):
         if not hasattr(self,'table'):return
-        self.output=self.output_edit.text();self.jobs={};self.table.blockSignals(True);self.table.setRowCount(0)
+        self.output=self.output_edit.text();self.jobs={};self.table.blockSignals(True);self.table.reset_cards();pending=[]
         for f in self.task_manifests():
             try:
                 j=WS.resolve_job_files(json.loads(f.read_text('utf-8')),f.parent)
                 if j['id'] in self.jobs:continue
-                j['folder']=str(f.parent);self.jobs[j['id']]=j;r=self.table.rowCount();self.table.insertRow(r)
-                for c,value in enumerate([j['created'],self.translate_status(j['status']),str(j['settings']['seed'])]):
-                    item=QTableWidgetItem(value);item.setData(Qt.ItemDataRole.UserRole,j['id']);self.table.setItem(r,c,item)
-                if j['id']==self.selected_id:self.table.selectRow(r)
+                j['folder']=str(f.parent);self.jobs[j['id']]=j
+                text=j['created']+'\n'+self.translate_status(j['status'])
+                tooltip=text+'\n'+str(j['settings'].get('prompt',''))
+                item,request=self.table.add_card(j,text,tooltip,self.data/'task_thumbnails')
+                if request:pending.append(request)
+                if j['id']==self.selected_id:self.table.setCurrentItem(item)
             except (ValueError,KeyError,OSError):continue
-        self.table.blockSignals(False);self.select_job()
+        self.table.blockSignals(False);self.select_job();self.table.load_thumbnails(pending)
     def selected_job(self,notify=True):
-        selected=self.table.selectionModel().selectedRows()
+        selected=self.table.selectedItems()
         if not selected:
             if notify:self.info(self.t('请先选择一条任务。','Please select a task first.'))
             return None
-        return self.jobs.get(self.table.item(selected[0].row(),0).data(Qt.ItemDataRole.UserRole))
+        return self.jobs.get(selected[0].data(Qt.ItemDataRole.UserRole))
     def select_job(self):
         j=self.selected_job(False);self.files.blockSignals(True);self.files.clear()
         if not j:
@@ -519,12 +523,18 @@ class Window(QMainWindow):
         j=self.selected_job()
         if j and j.get('prompt_id'):self.start_worker(lambda:self.monitor(j))
     def tools_page(self,v):
+        launcher=QFrame();launcher.setObjectName('card');row=QHBoxLayout(launcher);row.setContentsMargins(22,18,22,18)
+        text=QVBoxLayout();self.section(text,self.t('末帧工具','Last-frame tool'),self.t('从视频提取最后一帧，作为下一段视频的参考图片。','Extract a final frame to use as a reference for your next video.'));row.addLayout(text,1)
+        self.tool_open_button=self.button(self.t('打开工具','Open tool'),self.toggle_frame_tool,'accent');row.addWidget(self.tool_open_button);v.addWidget(launcher)
         card=QFrame();card.setObjectName('card');box=QVBoxLayout(card);box.setContentsMargins(26,24,26,24);box.setSpacing(18)
         self.section(box,self.t('提取最后一帧','Extract the final frame'),self.t('在本机处理，无需连接服务器。图片不会覆盖已有文件。','Runs locally, without a server connection. Existing images are never overwritten.'))
         box.addWidget(self.label(self.t('视频文件','Video file'),'muted'));h=QHBoxLayout();self.video_edit=QLineEdit(self.tool_video);self.video_edit.setPlaceholderText(self.t('选择一个视频…','Choose a video…'));h.addWidget(self.video_edit,1);h.addWidget(self.button(self.t('选择视频','Choose video'),self.choose_video));box.addLayout(h)
         box.addWidget(self.label(self.t('图片保存位置','Image destination'),'muted'));h=QHBoxLayout();self.dir_edit=QLineEdit(self.tool_dir);self.dir_edit.setPlaceholderText(self.t('留空则保存到视频旁边','Leave blank to save beside the video'));h.addWidget(self.dir_edit,1);h.addWidget(self.button(self.t('选择文件夹','Choose folder'),self.choose_tool_dir));box.addLayout(h)
         h=QHBoxLayout();self.extract_button=self.button(self.t('提取最后一帧','Extract last frame'),self.extract,'primary');h.addWidget(self.extract_button);h.addStretch();box.addLayout(h)
-        self.frame_label=self.label(self.tool_result or self.t('提取后的 PNG 将显示在这里。','Your extracted PNG will appear here.'),'muted',True);box.addWidget(self.frame_label);box.addWidget(self.button(self.t('打开图片','Open image'),lambda:self.open_path(self.tool_result) if self.tool_result else None));v.addWidget(card)
+        self.frame_label=self.label(self.tool_result or self.t('提取后的 PNG 将显示在这里。','Your extracted PNG will appear here.'),'muted',True);box.addWidget(self.frame_label);box.addWidget(self.button(self.t('打开图片','Open image'),lambda:self.open_path(self.tool_result) if self.tool_result else None));v.addWidget(card);self.frame_tool_panel=card;card.hide()
+    def toggle_frame_tool(self):
+        show=self.frame_tool_panel.isHidden();self.frame_tool_panel.setVisible(show)
+        self.tool_open_button.setText(self.t('收起工具','Close tool') if show else self.t('打开工具','Open tool'))
     def choose_video(self):
         f,_=QFileDialog.getOpenFileName(self,self.t('选择视频','Choose video'),'','Video (*.mp4 *.mov *.mkv *.avi *.webm *.m4v *.ts)')
         if f:self.video_edit.setText(f)
@@ -533,7 +543,7 @@ class Window(QMainWindow):
         if p:self.dir_edit.setText(p)
     def extract_result(self):
         p=self.chosen_file()
-        if p:self.video_edit.setText(p);self.dir_edit.setText(str(Path(p).parent));self.navigate(2);self.extract()
+        if p:self.video_edit.setText(p);self.dir_edit.setText(str(Path(p).parent));self.navigate(2);self.frame_tool_panel.show();self.tool_open_button.setText(self.t('收起工具','Close tool'));self.extract()
     def extract_reference(self):
         if self.busy:return
         picker=self.pickers['images']
@@ -737,7 +747,7 @@ class Window(QMainWindow):
         if self.busy and not self.confirm(self.t('服务器任务可能继续运行。关闭窗口会中断本机上传或下载，之后可从任务记录继续查询。现在关闭？','Server tasks may keep running. Local uploads or downloads will stop. You can resume from My tasks later. Close now?')):event.ignore();return
         try:self.save_preferences()
         except OSError:pass
-        self.player.stop();self.editor.pause();self.editor.save();self.stop.set();event.accept()
+        self.table.stop_loading();self.player.stop();self.editor.pause();self.editor.save();self.stop.set();event.accept()
 
 def self_test(folder,check_server=False):
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True);report={'version':VERSION,'checks':[]}
