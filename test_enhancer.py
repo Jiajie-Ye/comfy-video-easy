@@ -53,6 +53,43 @@ class EnhancerTests(unittest.TestCase):
             c=self.config();c['url']=url
             with self.assertRaises(P.EnhancementError):P.validate(c)
         with self.assertRaises(P.EnhancementError):P.request_data(self.config(),' ',{})
+    def test_reference_analysis_all_protocols(self):
+        for kind,_ in P.KINDS:
+            _,_,body=P.request_data(self.config(kind),'角色1跟角色2，图片3是首帧',dict(seconds=5,images=4),analysis=True)
+            text=json.dumps(body,ensure_ascii=False)
+            self.assertIn('角色2 means Picture 2',text);self.assertIn('Unmentioned images',text)
+            self.assertNotIn('reference_format',text)
+    def test_reference_mapping_parse_and_validation(self):
+        value=dict(bindings=[dict(entity='角色1',picture=1),dict(entity='角色2',picture=2)],first_frame_picture=3)
+        with patch.object(P,'enhance',return_value='```json\n'+json.dumps(value)+'\n```'):
+            self.assertEqual(P.analyze_references(self.config(),'story',dict(seconds=5,images=4)),value)
+        for bad in [dict(bindings=[dict(entity='x',picture=5)]),dict(bindings=[],first_frame_picture=True),dict(bindings='oops')]:
+            with self.assertRaises(P.EnhancementError):P.validate_plan(bad,4)
+    def test_confirmed_mapping_and_output_guard(self):
+        plan=dict(bindings=[dict(entity='角色1',picture=2)],first_frame_picture=3)
+        _,_,body=P.request_data(self.config(),'角色1',dict(seconds=5,images=4,reference_plan=plan,first_frame_picture=3))
+        self.assertIn('AUTHORITATIVE REFERENCE PLAN',body['messages'][0]['content'])
+        self.assertEqual(json.loads(body['messages'][1]['content'])['video_context']['reference_plan'],plan)
+        P.check_reference_output('<Picture 2> moves, opening <Picture 3>',plan)
+        for text in ['<Picture 1> <Picture 2> <Picture 3>','<Picture 2>']:
+            with self.assertRaises(P.EnhancementError):P.check_reference_output(text,plan)
+    def test_reference_review_edit_and_unused(self):
+        from PyQt6.QtWidgets import QApplication,QWidget,QLabel,QPushButton
+        from enhancer_ui import ReferenceReview
+        app=QApplication.instance() or QApplication([])
+        class Host(QWidget):
+            t=staticmethod(lambda zh,en:zh)
+            def label(self,text,*args):return QLabel(text)
+            def button(self,text,slot,*args):
+                b=QPushButton(text);b.clicked.connect(slot);return b
+            def info(self,text):raise AssertionError(text)
+        host=Host();host.resize(1200,850)
+        plan=dict(bindings=[dict(entity='角色1',picture=1),dict(entity='角色2',picture=2)],first_frame_picture=3)
+        d=ReferenceReview(host,'角色1和角色2，图片3是首帧',['none']*4,plan)
+        self.assertIn('<Picture 4>',d.unused.text());self.assertNotIn('<Picture 3>',d.unused.text())
+        d.rows[0][2].setCurrentIndex(4);d.first.setCurrentIndex(1);d.apply()
+        self.assertEqual(d.result_plan['bindings'][0]['picture'],4);self.assertEqual(d.result_plan['first_frame_picture'],1)
+        d.deleteLater();host.deleteLater()
     @unittest.skipUnless(os.name=='nt','Windows DPAPI')
     def test_key_is_encrypted_on_disk_and_roundtrips(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -8,6 +8,8 @@ A simple Windows desktop client that turns a ComfyUI MiniMax H3 video workflow i
 
 > This client targets a specific MiniMax H3 reference-video workflow. It is not a universal frontend for arbitrary ComfyUI workflows. Install the required models and custom nodes on your own server. This repository contains no model weights, private server addresses, reference media, or generation records.
 
+Prompt enhancement now first asks the configured model to map story entities to picture numbers, then opens an editable confirmation dialog with thumbnails, a first-frame selector and an unused-image list. For example, role 1 / role 2 normally map to Picture 1 / Picture 2; explicit assignments take priority. Only confirmed references appear in the enhanced prompt, without renumbering. Applying the result also updates the first-frame guide. This is text-based mapping, not image understanding; images are not uploaded. The two stages make two API requests. Unused images remain in the media list and are still inputs to the video workflow; this feature only restricts prompt references.
+
 ## Features
 
 - Image, audio, and video references, with image thumbnails and double-click previews.

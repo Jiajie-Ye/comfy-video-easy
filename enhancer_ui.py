@@ -1,7 +1,8 @@
 """Provider configuration and review dialogs for prompt enhancement."""
 from pathlib import Path
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QApplication,QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QLineEdit,QTextEdit,QComboBox,QSpinBox,QCheckBox,QTabWidget,QWidget,QFileDialog,QLabel)
+from PyQt6.QtWidgets import (QApplication,QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QLineEdit,QTextEdit,QComboBox,QSpinBox,QCheckBox,QTabWidget,QWidget,QFileDialog,QLabel,QScrollArea)
+from PyQt6.QtGui import QPixmap
 import prompt_enhancer as P
 
 class SafeCombo(QComboBox):
@@ -67,3 +68,54 @@ class EnhancementReview(QDialog):
         buttons=QHBoxLayout();buttons.addWidget(window.button(window.t('复制结果','Copy result'),lambda:QApplication.clipboard().setText(self.output.toPlainText())));buttons.addStretch();buttons.addWidget(window.button(window.t('保留原文','Keep original'),self.reject));buttons.addWidget(window.button(window.t('应用增强结果','Apply enhanced prompt'),self.apply,'primary'));v.addLayout(buttons)
     def apply(self):
         if self.output.toPlainText().strip():self.result_text=self.output.toPlainText().strip();self.accept()
+
+
+class ReferenceReview(QDialog):
+    """Editable entity -> original picture relations; no picture renumbering."""
+    def __init__(self,window,draft,paths,plan):
+        super().__init__(window);self.window=window;self.paths=list(paths);self.rows=[];self.result_plan=None
+        t=window.t;self.setWindowTitle(t('确认角色与参考图片','Confirm roles and reference images'));self.resize(min(960,window.width()-40),min(700,window.height()-60))
+        v=QVBoxLayout(self);v.addWidget(window.label(t('先确认对应关系，再增强剧本。可修改名称和图片编号；未使用图片不会写入提示词。','Confirm mappings before enhancing. Edit names or image numbers; unused images stay out of the prompt.'),'section',True))
+        story=QTextEdit();story.setPlainText(draft);story.setReadOnly(True);story.setMaximumHeight(95);v.addWidget(story)
+        v.addWidget(window.label(t('依据文字与编号理解，不上传图片、不识别画面内容。一次识别、确认后再调用一次增强。','Text/number mapping only; images are not uploaded or visually analyzed. One API call to map, another after confirmation to enhance.'),'muted',True))
+        scroll=QScrollArea();scroll.setWidgetResizable(True);body=QWidget();self.list_layout=QVBoxLayout(body);scroll.setWidget(body);v.addWidget(scroll,1)
+        for row in plan['bindings']:self.add_row(row['entity'],row['picture'])
+        v.addWidget(window.button(t('+ 添加对应关系','+ Add mapping'),lambda:self.add_row('',None)))
+        firstrow=QHBoxLayout();firstrow.addWidget(window.label(t('首帧参考','First-frame reference'),'section'));self.first=self.combo();self.first.setCurrentIndex(max(0,self.first.findData(plan['first_frame_picture'])));self.first.currentIndexChanged.connect(self.update_unused);firstrow.addWidget(self.first,1);v.addLayout(firstrow)
+        self.gallery=QHBoxLayout();v.addLayout(self.gallery)
+        for i,path in enumerate(paths,1):
+            box=QVBoxLayout();pic=QLabel();pix=QPixmap(path);pic.setPixmap(pix.scaled(76,58,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation));pic.setToolTip(Path(path).name);box.addWidget(pic);box.addWidget(window.label(f'<Picture {i}>','muted'));self.gallery.addLayout(box)
+        self.unused=window.label('','muted',True);v.addWidget(self.unused)
+        v.addWidget(window.label(t('应用增强结果时同步首帧设置。未使用图片仍保留在素材列表；本次仅限制提示词引用，不改变视频工作流的素材输入。','Applying the result also updates the first-frame setting. Unused images remain in the media list; this controls prompt references, not the workflow media inputs.'),'muted',True))
+        buttons=QHBoxLayout();buttons.addStretch();buttons.addWidget(window.button(t('取消','Cancel'),self.reject));buttons.addWidget(window.button(t('确认并增强','Confirm and enhance'),self.apply,'primary'));v.addLayout(buttons);self.update_unused()
+    def combo(self):
+        c=SafeCombo();c.addItem(self.window.t('不使用 / 未指定','Unused / not assigned'),None)
+        for i in range(1,len(self.paths)+1):c.addItem(f'<Picture {i}>',i)
+        return c
+    def add_row(self,entity,picture):
+        widget=QWidget();row=QHBoxLayout(widget);row.setContentsMargins(0,4,0,4);name=QLineEdit(entity);name.setPlaceholderText(self.window.t('角色 / 场景名称','Role / scene name'));combo=self.combo();combo.setCurrentIndex(max(0,combo.findData(picture)));preview=QLabel();preview.setFixedSize(68,52)
+        row.addWidget(name,2);row.addWidget(QLabel('→'));row.addWidget(combo,1);row.addWidget(preview)
+        entry=(widget,name,combo,preview);self.rows.append(entry);self.list_layout.addWidget(widget)
+        row.addWidget(self.window.button(self.window.t('移除','Remove'),lambda:self.remove_row(entry),'quiet'))
+        combo.currentIndexChanged.connect(self.update_unused);self.update_unused()
+    def remove_row(self,entry):
+        self.rows.remove(entry);entry[0].deleteLater();self.update_unused()
+    def update_unused(self):
+        used=set()
+        for widget,name,combo,preview in self.rows:
+            n=combo.currentData();preview.clear()
+            if n is not None:
+                used.add(n);pix=QPixmap(self.paths[n-1]);preview.setPixmap(pix.scaled(68,52,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation))
+        if not hasattr(self,'unused'):return
+        if self.first.currentData() is not None:used.add(self.first.currentData())
+        unused=', '.join(f'<Picture {i}>' for i in range(1,len(self.paths)+1) if i not in used)
+        self.unused.setText(self.window.t('本次未使用：','Unused this time: ')+(unused or self.window.t('无','None')))
+    def apply(self):
+        rows=[]
+        for widget,name,combo,preview in self.rows:
+            if combo.currentData() is None:continue
+            if not name.text().strip():self.window.info(self.window.t('请填写已选择图片对应的角色或场景名称。','Enter a role or scene name for each selected image.'));return
+            rows.append(dict(entity=name.text().strip(),picture=combo.currentData()))
+        try:self.result_plan=P.validate_plan(dict(bindings=rows,first_frame_picture=self.first.currentData()),len(self.paths))
+        except P.EnhancementError as exc:self.window.info(str(exc));return
+        self.accept()

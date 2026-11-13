@@ -211,10 +211,29 @@ class ModernTests(unittest.TestCase):
         import prompt_enhancer as PE
         cfg=PE.defaults();cfg.update(url='https://example.invalid/v1',model='test')
         self.w.prompt.setPlainText('A person walks');self.w.controls['seconds'].setValue(7)
-        with patch('modern_app.PE.load_config',return_value=cfg),patch.object(self.w,'start_worker') as worker,patch('modern_app.PE.enhance',return_value='result') as enhance,patch.object(self.w,'emit') as emit:
-            self.w.enhance_prompt();self.w.controls['seconds'].setValue(12);worker.call_args.args[0]()
+        from PyQt6.QtWidgets import QDialog
+        with patch('modern_app.PE.load_config',return_value=cfg),patch.object(self.w,'start_worker') as worker,patch.object(self.w,'emit') as emit:
+            self.w.enhance_prompt();worker.call_args.args[0]()
+            value=emit.call_args.args[1];self.assertEqual(value['context']['seconds'],7)
+        with patch('modern_app.ReferenceReview') as review,patch.object(self.w,'start_worker') as worker,patch('modern_app.PE.enhance',return_value='result') as enhance,patch.object(self.w,'emit') as emit:
+            review.return_value.exec.return_value=QDialog.DialogCode.Accepted
+            review.return_value.result_plan=dict(bindings=[],first_frame_picture=None)
+            self.w.confirm_reference_plan(value);self.w.controls['seconds'].setValue(12);worker.call_args.args[0]()
             self.assertEqual(enhance.call_args.args[2]['seconds'],7)
             self.assertEqual(emit.call_args.args[1]['seconds'],7)
+    def test_reference_confirmation_cancel_and_apply_first_frame(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+        self.w.prompt.setPlainText('角色1，图3首帧');picker=self.w.pickers['images'];picker.paths=['a.png','b.png','c.png'];picker.refresh()
+        plan=dict(bindings=[dict(entity='角色1',picture=1)],first_frame_picture=3)
+        value=dict(draft=self.w.prompt.toPlainText(),context=dict(seconds=5,images=3),paths=list(picker.paths),plan=plan,cfg={})
+        with patch('modern_app.ReferenceReview') as review,patch.object(self.w,'start_worker') as worker:
+            review.return_value.exec.return_value=QDialog.DialogCode.Rejected
+            self.w.confirm_reference_plan(value);worker.assert_not_called();self.assertEqual(picker.first_frame,'')
+        with patch('modern_app.EnhancementReview') as review:
+            review.return_value.exec.return_value=QDialog.DialogCode.Accepted;review.return_value.result_text='<Picture 1> opens on <Picture 3>'
+            self.w.review_enhancement(dict(draft=value['draft'],result=review.return_value.result_text,reference_plan=plan,reference_paths=value['paths']))
+        self.assertEqual(picker.first_frame,'c.png');self.assertEqual(self.w.config['first_frame'],'c.png')
     def test_changed_duration_can_keep_original(self):
         from unittest.mock import patch
         from PyQt6.QtWidgets import QDialog

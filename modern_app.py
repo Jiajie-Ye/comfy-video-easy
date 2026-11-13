@@ -15,10 +15,10 @@ import engine as E
 from editor_ui import Editor
 import prompt_enhancer as PE
 import workspaces as WS
-from enhancer_ui import EnhancementSettings,EnhancementReview
+from enhancer_ui import EnhancementSettings,EnhancementReview,ReferenceReview
 from image_ui import ImageCreator
 
-VERSION='0.6.1'
+VERSION='0.6.2'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -322,9 +322,25 @@ class Window(QMainWindow):
         context=dict(seconds=self.controls['seconds'].value(),ratio=self.controls['ratio'].currentData(),**{key:len(value.paths) for key,value in self.pickers.items()})
         first=self.pickers['images'].first_frame
         if first in self.pickers['images'].paths:context['first_frame_picture']=self.pickers['images'].paths.index(first)+1
+        paths=list(self.pickers['images'].paths)
         def work():
-            self.emit('pair',(f"正在按 {context['seconds']} 秒增强剧本提示词…",f"Enhancing your prompt for {context['seconds']} seconds…"))
-            result=PE.enhance(cfg,draft,context);self.emit('enhanced',dict(draft=draft,result=result,seconds=context['seconds']))
+            self.emit('pair',('正在识别角色、图片和首帧关系…','Identifying roles, images and first frame…'))
+            plan=PE.analyze_references(cfg,draft,context) if paths else dict(bindings=[],first_frame_picture=None)
+            self.emit('reference_plan',dict(draft=draft,context=context,paths=paths,plan=plan,cfg=cfg))
+        self.start_worker(work)
+    def confirm_reference_plan(self,value):
+        if self.busy:return
+        if list(self.pickers['images'].paths)!=value['paths'] or self.prompt.toPlainText().strip()!=value['draft']:
+            self.info(self.t('识别期间剧情或参考图片发生变化，请重新点击增强。','The story or references changed during analysis. Please enhance again.'));return
+        dialog=ReferenceReview(self,value['draft'],value['paths'],value['plan'])
+        if dialog.exec()!=QDialog.DialogCode.Accepted:return
+        context=dict(value['context']);context['reference_plan']=dialog.result_plan
+        context['first_frame_picture']=dialog.result_plan['first_frame_picture']
+        context['seconds']=self.controls['seconds'].value();context['ratio']=self.controls['ratio'].currentData()
+        def work():
+            self.emit('pair',('正在按已确认的参考关系增强剧本…','Enhancing with confirmed reference mappings…'))
+            result=PE.enhance(value['cfg'],value['draft'],context);PE.check_reference_output(result,dialog.result_plan)
+            self.emit('enhanced',dict(draft=value['draft'],result=result,seconds=context['seconds'],reference_plan=dialog.result_plan,reference_paths=value['paths']))
         self.start_worker(work)
     def review_enhancement(self,value):
         # Keep originals/results locally; no credentials or endpoint configuration in history.
@@ -336,6 +352,11 @@ class Window(QMainWindow):
             if value.get('seconds',self.controls['seconds'].value())!=self.controls['seconds'].value() and not self.confirm(self.t(f"本次结果按 {value['seconds']} 秒设计，但你已更改生成时长。仍要应用？",f"This result was designed for {value['seconds']} seconds, but the duration has changed. Apply anyway?")):return
             current=self.prompt.toPlainText().strip()
             if current!=value['draft'] and not self.confirm(self.t('等待增强时你修改了原文。仍要应用增强结果？','You edited the draft while waiting. Apply the enhanced result anyway?')):return
+            if 'reference_plan' in value:
+                picker=self.pickers['images']
+                if picker.paths!=value['reference_paths']:
+                    self.info(self.t('参考图片已改变，请重新增强以免编号错位。','Reference images changed. Enhance again to avoid incorrect numbering.'));return
+                first=value['reference_plan']['first_frame_picture'];picker.first_frame=picker.paths[first-1] if first else '';picker.refresh()
             cursor=self.prompt.textCursor();cursor.select(cursor.SelectionType.Document);cursor.insertText(dialog.result_text);self.prompt.setTextCursor(cursor);self.save_preferences()
             self.raw_status=None;self.status_pair=('增强结果已应用，可用 Ctrl+Z 撤销。','Enhanced prompt applied. Press Ctrl+Z to undo.')
         else:self.raw_status=None;self.status_pair=('已保留原文，增强结果已存入本地历史。','Original kept. The enhanced result is saved in local history.')
@@ -652,12 +673,16 @@ class Window(QMainWindow):
         elif name=='connected':self.connected=True;self.connection.setText(self.t('● 已连接','● Connected'))
         elif name=='refresh':self.refresh_history()
         elif name=='workspace_changed':self.apply_workspace(value)
+        elif name=='reference_plan':self.pending_reference_plan=value
         elif name=='enhanced':self.review_enhancement(value)
         elif name=='reference_frame':self.add_reference_frame(value)
         elif name=='frame':self.tool_result=value;self.frame_label.setText(value);self.raw_status=None;self.status_pair=('末帧已保存，可以打开图片了。','Last frame saved. Your image is ready.')
         elif name=='completed':self.selected_id=value['id'];self.refresh_history();self.raw_status=None;self.status_pair=('视频已保存，可以播放或继续强化。','Video saved. Play it or refine it further.')
         elif name=='error':self.raw_status=None;self.status_pair=('处理未完成，记录已保留。','Needs attention. Your task record has been kept.');self.error(value)
-        elif name=='idle':self.busy=False;self.sync_busy()
+        elif name=='idle':
+            self.busy=False;self.sync_busy()
+            pending=getattr(self,'pending_reference_plan',None);self.pending_reference_plan=None
+            if pending is not None:QTimer.singleShot(0,lambda:self.confirm_reference_plan(pending))
         self.update_status()
     def check_connection(self):
         if self.busy:return
