@@ -104,7 +104,7 @@ class ModernTests(unittest.TestCase):
         w=self.w;w.navigate(1);APP.processEvents()
         left=w.table.mapTo(w,QPoint(0,0));right=w.preview_panel.mapTo(w,QPoint(0,0))
         self.assertLess(left.x(),right.x());self.assertLessEqual(left.x()+w.table.width(),right.x())
-        self.assertTrue(w.preview_panel.isAncestorOf(w.play_button));self.assertTrue(w.preview_panel.isAncestorOf(w.frame_button))
+        self.assertTrue(w.preview_panel.isAncestorOf(w.play_button))
         item,_=w.table.add_card(dict(id='hover'), 'time\nCompleted','long prompt must never show',w.data/'task_thumbnails')
         self.assertEqual(item.toolTip(),'')
     def test_manual_preview_play_restores_sound(self):

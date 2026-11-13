@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 import requests
 
 SERVER = 'http://127.0.0.1:8188'
-APP_VERSION = '0.6.5'
+APP_VERSION = '0.6.6'
 RATIOS = {'横屏 16:9':'16:9 (Widescreen)', '竖屏 9:16':'9:16 (Portrait Widescreen)', '方形 1:1':'1:1 (Square)', '竖图 2:3':'2:3 (Portrait Photo)'}
 MAX_SEED = 2**53-1
 

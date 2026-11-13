@@ -19,7 +19,7 @@ from enhancer_ui import EnhancementSettings,EnhancementReview,ReferenceReview
 from image_ui import ImageCreator
 from task_gallery import TaskGallery
 
-VERSION='0.6.5'
+VERSION='0.6.6'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -439,7 +439,7 @@ class Window(QMainWindow):
         self.seek=QSlider(Qt.Orientation.Horizontal);self.seek.setRange(0,self.player.duration());self.seek.sliderMoved.connect(self.player.setPosition);controls.addWidget(self.seek,1);self.media_time=self.label('00:00 / 00:00','muted');controls.addWidget(self.media_time);panel.addLayout(controls)
         self.files=QListWidget();self.files.setMinimumHeight(48);self.files.setMaximumHeight(70);self.files.itemDoubleClicked.connect(lambda _:self.play());self.files.currentItemChanged.connect(lambda *_:self.preview_selected_file());panel.addWidget(self.files)
         self.details=self.label(self.t('选择左侧任务，查看视频与参数。','Select a task on the left to preview it.'),'muted',True);self.details.setMaximumHeight(60);self.details.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);panel.addWidget(self.details)
-        h=QHBoxLayout();self.play_button=self.button(self.t('播放视频','Play video'),self.play);self.frame_button=self.button(self.t('提取末帧','Extract last frame'),self.extract_result);h.addWidget(self.play_button);h.addWidget(self.frame_button);panel.addLayout(h)
+        h=QHBoxLayout();self.play_button=self.button(self.t('播放视频','Play video'),self.play);h.addWidget(self.play_button);panel.addLayout(h)
         columns.addWidget(self.preview_panel,1)
     def update_playback(self,*_):
         if not hasattr(self,'seek'):return
