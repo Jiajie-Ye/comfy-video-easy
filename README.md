@@ -10,6 +10,10 @@ A simple Windows desktop client that turns a ComfyUI MiniMax H3 video workflow i
 
 Prompt enhancement now first asks the configured model to map story entities to picture numbers, then opens an editable confirmation dialog with thumbnails, a first-frame selector and an unused-image list. For example, role 1 / role 2 normally map to Picture 1 / Picture 2; explicit assignments take priority. Only confirmed references appear in the enhanced prompt, without renumbering. Applying the result also updates the first-frame guide. This is text-based mapping, not image understanding; images are not uploaded. The two stages make two API requests. Unused images remain in the media list and are still inputs to the video workflow; this feature only restricts prompt references.
 
+## Download for Windows
+
+Download **AI视频助手_0.6.8_Windows.zip** from [Releases](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest), extract it, then double-click **AI视频助手.exe**. No Python installation is required. The public build contains no personal server address, API credentials or task history. Configure your own ComfyUI server under Settings, and optional model APIs in their respective settings. GitHub’s **Source code** downloads are for developers and require the Python setup below.
+
 ## Features
 
 - Image, audio, and video references, with image thumbnails and double-click previews.
