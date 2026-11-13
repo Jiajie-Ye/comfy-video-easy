@@ -210,6 +210,8 @@ class ModernTests(unittest.TestCase):
         from PyQt6.QtCore import Qt,QPoint
         from PyQt6.QtTest import QTest
         editor=self.w.editor;self.w.navigate(5)
+        from unittest.mock import patch
+        media=patch.object(editor.player,'setSource');media.start();self.addCleanup(media.stop)
         source=Path(self.tmp.name)/'original.mp4';source.write_bytes(b'unchanged')
         editor.clips=[dict(id=str(n),path=str(source),duration=5.,start=0.,end=5.) for n in range(2)];editor.refresh();APP.processEvents()
         x,width=editor.timeline.boxes()[1];QTest.mouseClick(editor.timeline,Qt.MouseButton.LeftButton,pos=QPoint(x+20,40))
