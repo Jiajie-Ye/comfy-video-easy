@@ -18,7 +18,7 @@ import workspaces as WS
 from enhancer_ui import EnhancementSettings,EnhancementReview,ReferenceReview
 from image_ui import ImageCreator
 
-VERSION='0.6.2'
+VERSION='0.6.3'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -192,7 +192,7 @@ class Picker(QFrame):
 
 class Window(QMainWindow):
     def __init__(self,data_dir):
-        super().__init__();self.data=Path(data_dir);self.data.mkdir(parents=True,exist_ok=True)
+        super().__init__();self.setWindowIcon(QIcon(str(E.resource('app_icon.ico'))));self.data=Path(data_dir);self.data.mkdir(parents=True,exist_ok=True)
         self.lang='zh';self.config=E.defaults();self.output=str(self.data/'视频作品');self.history_roots=[];self.page=0;self.busy=False;self.stop=threading.Event()
         self.status_pair=('准备好开始创作了','Ready when you are');self.raw_status=None;self.connected=False
         self.tool_video='';self.tool_dir='';self.tool_result='';self.selected_id=None;self.jobs={};self.worker=None;self.qt_translator=None
@@ -771,7 +771,10 @@ def self_test(folder,check_server=False):
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--data-dir');parser.add_argument('--self-test');parser.add_argument('--check-server',action='store_true');args=parser.parse_args()
     if args.self_test:sys.exit(self_test(args.self_test,args.check_server))
-    app=QApplication(sys.argv);app.setStyle('Fusion')
+    if sys.platform=='win32':
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('ComfyVideoEasy.Desktop')
+    app=QApplication(sys.argv);app.setStyle('Fusion');app.setWindowIcon(QIcon(str(E.resource('app_icon.ico'))))
     base=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).parent
     data=args.data_dir or str(WS.startup_workspace(base))
     try:

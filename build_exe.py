@@ -8,6 +8,8 @@ FFMPEG=Path(ffmpeg_dir).resolve()
 if not (FFMPEG/'ffmpeg.exe').is_file():raise SystemExit('请设置 CVE_FFMPEG_DIR 为包含 ffmpeg.exe、ffprobe.exe 和 DLL 的文件夹。')
 args=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--onefile','--windowed','--name','AI视频助手',
       '--distpath',str(ROOT/'dist'),'--workpath',str(ROOT/'build'),'--specpath',str(ROOT/'build'),
+      '--icon',str(ROOT/'app_icon.ico'),
+      '--add-data',str(ROOT/'app_icon.ico')+os.pathsep+'.',
       '--add-data',str(ROOT/'profile.json')+os.pathsep+'.',
       '--add-data',str(ROOT/'prompt_template.txt')+os.pathsep+'.',
       '--add-data',str(ROOT/'check.svg')+os.pathsep+'.',
