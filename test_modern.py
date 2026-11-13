@@ -206,6 +206,20 @@ class ModernTests(unittest.TestCase):
         for j,path in jobs:
             self.w.selected_id=j['id'];self.w.refresh_history();self.assertEqual(self.w.player.source(),QUrl.fromLocalFile(str(path.resolve())))
         jobs[1][0]['files']=[];E.save_job(jobs[1][0]);self.w.refresh_history();self.assertTrue(self.w.player.source().isEmpty())
+    def test_delete_selected_editor_clip_and_undo(self):
+        from PyQt6.QtCore import Qt,QPoint
+        from PyQt6.QtTest import QTest
+        editor=self.w.editor;self.w.navigate(5)
+        source=Path(self.tmp.name)/'original.mp4';source.write_bytes(b'unchanged')
+        editor.clips=[dict(id=str(n),path=str(source),duration=5.,start=0.,end=5.) for n in range(2)];editor.refresh();APP.processEvents()
+        x,width=editor.timeline.boxes()[1];QTest.mouseClick(editor.timeline,Qt.MouseButton.LeftButton,pos=QPoint(x+20,40))
+        self.assertEqual(editor.selected,1);QTest.keyClick(editor.timeline,Qt.Key.Key_Delete)
+        self.assertEqual([c['id'] for c in editor.clips],['0']);self.assertEqual(source.read_bytes(),b'unchanged')
+        editor.undo_change();self.assertEqual(len(editor.clips),2)
+        editor.start.setFocus();QTest.keyClick(editor.start,Qt.Key.Key_Delete);self.assertEqual(len(editor.clips),2)
+        editor.busy=True;QTest.keyClick(editor.timeline,Qt.Key.Key_Delete);self.assertEqual(len(editor.clips),2);editor.busy=False
+        editor.delete_clip_button.click();editor.delete_clip_button.click();self.assertEqual(editor.clips,[]);self.assertFalse(editor.delete_clip_button.isEnabled())
+        editor.remove();self.assertEqual(editor.clips,[])
     def test_editor_draft_survives_language_and_undo(self):
         editor=self.w.editor;editor.clips=[dict(id='a',path='example.mp4',duration=8.,start=0.,end=8.)];editor.selected=0;editor.refresh();editor.cursor=3.;editor.split();self.assertEqual(len(editor.clips),2);editor.undo_change();self.assertEqual(len(editor.clips),1);editor.save()
         self.w.toggle_language();self.assertEqual(len(self.w.editor.clips),1);self.assertEqual(self.w.editor.clips[0]['end'],8.)

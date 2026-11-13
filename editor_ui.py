@@ -33,7 +33,7 @@ class PreviewSurface(QWidget):
 class Timeline(QWidget):
     MIME='application/x-comfy-video-clip'
     def __init__(self,editor):
-        super().__init__();self.editor=editor;self.setFixedHeight(100);self.setMouseTracking(True);self.setAcceptDrops(True);self.drag=None;self.drag_index=None;self.drop_slot=None
+        super().__init__();self.editor=editor;self.setFixedHeight(100);self.setMouseTracking(True);self.setFocusPolicy(Qt.FocusPolicy.StrongFocus);self.setAcceptDrops(True);self.drag=None;self.drag_index=None;self.drop_slot=None
     def boxes(self):
         total=X.total_duration(self.editor.clips);scale=max(40,(self.width()-16)/max(total,.01));x=8.;result=[]
         for c in self.editor.clips:
@@ -67,7 +67,12 @@ class Timeline(QWidget):
         width=self.boxes()[index][1];pix=QPixmap(width,54);pix.fill(Qt.GlobalColor.transparent);p=QPainter(pix);p.setRenderHint(QPainter.RenderHint.Antialiasing);p.setOpacity(.9);self.draw_clip(p,index,0,width,2);p.end();return pix
     def mousePressEvent(self,event):
         if event.button()!=Qt.MouseButton.LeftButton or self.editor.busy or not self.editor.clips:return
-        self.drag=(self.hit(event.position().x()),event.position().toPoint())
+        self.setFocus(Qt.FocusReason.MouseFocusReason);self.drag=(self.hit(event.position().x()),event.position().toPoint())
+    def keyPressEvent(self,event):
+        if event.key()==Qt.Key.Key_Delete and event.modifiers()==Qt.KeyboardModifier.NoModifier:
+            if not event.isAutoRepeat():self.editor.remove()
+            event.accept();return
+        super().keyPressEvent(event)
     def mouseMoveEvent(self,event):
         if not self.drag or not event.buttons() & Qt.MouseButton.LeftButton:return
         index,point=self.drag
@@ -113,9 +118,9 @@ class Editor(QWidget):
         for field in [self.start,self.end]:field.setDecimals(2);field.setRange(0,86400);field.setSingleStep(.1);field.setSuffix(' s')
         bounds=QHBoxLayout();bounds.addWidget(window.label(self.t('入点','In')));bounds.addWidget(self.start);bounds.addWidget(window.label(self.t('出点','Out')));bounds.addWidget(self.end);right.addLayout(bounds)
         trim=QHBoxLayout();trim.addWidget(self.button('此处作为入点','Set in here',lambda:self.set_boundary(True)));trim.addWidget(self.button('此处作为出点','Set out here',lambda:self.set_boundary(False)));right.addLayout(trim)
-        tools=QHBoxLayout();tools.addWidget(self.button('应用裁剪','Apply trim',self.trim));tools.addWidget(self.button('在此分割','Split here',self.split));tools.addWidget(self.button('删除片段','Remove',self.remove));right.addLayout(tools)
+        tools=QHBoxLayout();tools.addWidget(self.button('应用裁剪','Apply trim',self.trim));tools.addWidget(self.button('在此分割','Split here',self.split));right.addLayout(tools)
         self.total=window.label('','muted',True);right.addWidget(self.total);right.addStretch()
-        body.addWidget(window.label(self.t('时间轴 · 点击定位，左右拖动片段调整拼接顺序','Timeline · Click to seek; drag clips left or right to reorder'),'muted',True))
+        timeline_heading=QHBoxLayout();timeline_heading.addWidget(window.label(self.t('时间轴 · 点击选择，拖动排序，Delete 删除片段','Timeline · Select, drag to reorder, Delete to remove'),'muted',True),1);self.delete_clip_button=self.button('删除片段 · Delete','Delete clip · Del',self.remove);timeline_heading.addWidget(self.delete_clip_button);body.addLayout(timeline_heading)
         self.timeline=Timeline(self);area=QScrollArea();area.setWidgetResizable(True);area.setFixedHeight(118);area.setWidget(self.timeline);body.addWidget(area)
         captions=QHBoxLayout();captions.addWidget(self.button('自动识别字幕','Auto captions',self.auto_captions));captions.addWidget(self.button('编辑字幕','Edit captions',self.edit_captions));captions.addWidget(self.button('导入 SRT','Import SRT',self.import_srt));self.cue_count=window.label('','muted');captions.addWidget(self.cue_count);captions.addStretch();body.addLayout(captions)
         export=QHBoxLayout();self.size=SafeCombo()
@@ -134,6 +139,7 @@ class Editor(QWidget):
         self.save();self.refresh()
     def refresh(self):
         self.scrub_timer.stop();self.scrub_value=None;self.pause();self.timeline.refresh();total=X.total_duration(self.clips);self.seek.blockSignals(True);self.seek.setRange(0,round(total*1000));self.seek.blockSignals(False);self.total.setText(self.t(f'{len(self.clips)} 个片段 · 总长 {total:.2f} 秒',f'{len(self.clips)} clips · {total:.2f} seconds'));self.cue_count.setText(self.t(f'{len(self.cues)} 条字幕',f'{len(self.cues)} captions'))
+        self.delete_clip_button.setEnabled(bool(self.clips))
         if self.clips:self.select(min(max(self.selected,0),len(self.clips)-1))
         else:
             self.loading=True;self.selected=-1;self.pending=None;self.seek_target=None;self.player.stop();self.player.setSource(QUrl());self.video.clear();self.clip_name.setText(self.t('请先添加视频','Add videos first'));self.time.setText('0.00 / 0.00s');self.seek.setValue(0)
@@ -232,7 +238,8 @@ class Editor(QWidget):
         except ValueError as exc:self.window.info(str(exc));return
         self.snapshot();self.clips=clips;self.changed()
     def remove(self):
-        if self.selected>=0:self.snapshot();self.clips.pop(self.selected);self.changed()
+        if self.busy or not 0<=self.selected<len(self.clips):return
+        self.pause();self.snapshot();self.clips.pop(self.selected);self.changed()
     def reorder(self,old,new):
         if old==new:return
         self.snapshot();c=self.clips.pop(old);self.clips.insert(new,c);self.selected=new;self.changed()
