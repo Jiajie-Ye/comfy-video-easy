@@ -251,15 +251,26 @@ class Editor(QWidget):
         files,_=QFileDialog.getOpenFileNames(self,self.t('选择视频，可多选','Choose videos'),'', 'Video (*.mp4 *.mov *.mkv *.avi *.webm *.m4v)')
         if files:self.add_files(files)
     def add_tasks(self):
-        choices=self.window.completed_video_choices();d=QDialog(self);d.setWindowTitle(self.t('从已完成任务添加，可多选','Add completed videos'));d.resize(700,440);v=QVBoxLayout(d)
-        from PyQt6.QtWidgets import QListWidget,QListWidgetItem,QAbstractItemView
-        listing=QListWidget();listing.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection);v.addWidget(listing)
-        for path,label in choices:item=QListWidgetItem(label);item.setData(Qt.ItemDataRole.UserRole,path);listing.addItem(item)
+        from task_gallery import TaskGallery
+        from PyQt6.QtWidgets import QAbstractItemView
+        choices=self.window.completed_video_choices();d=QDialog(self);d.setWindowTitle(self.t('从已完成任务添加，可多选','Add completed videos'));d.resize(min(860,self.window.width()-40),min(580,self.window.height()-60));v=QVBoxLayout(d)
+        v.addWidget(self.window.label(self.t('点击缩略图选择，再次点击取消；支持一次添加多个视频。','Click thumbnails to select; click again to deselect. Add multiple videos at once.'),'muted',True))
+        listing=TaskGallery();listing.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection);listing.setMinimumHeight(220);listing.setMaximumHeight(16777215);v.addWidget(listing,1);pending=[]
+        for path,label in choices:
+            heading=label.split('\n',1)[0];created,separator,name=heading.partition('  ·  ')
+            item,request=listing.add_card(dict(id=path,files=[path]),created+'\n'+(name if separator else Path(path).name),'',self.window.data/'task_thumbnails')
+            if request:pending.append(request)
         if not choices:v.addWidget(self.window.label(self.t('暂无已完成且已下载的视频。','No completed, downloaded videos available.'),'muted'))
-        row=QHBoxLayout();row.addWidget(self.button('取消','Cancel',d.reject));row.addWidget(self.button('添加选中视频','Add selected',d.accept,'primary'));v.addLayout(row)
-        if d.exec()==QDialog.DialogCode.Accepted:
-            files=[i.data(Qt.ItemDataRole.UserRole) for i in listing.selectedItems()]
-            if files:self.add_files(files)
+        count=self.window.label('','muted');v.addWidget(count)
+        row=QHBoxLayout();row.addWidget(self.button('取消','Cancel',d.reject));add=self.button('添加选中视频','Add selected',d.accept,'primary');row.addWidget(add);v.addLayout(row)
+        def update_selection():
+            n=len(listing.selectedItems());count.setText(self.t(f'已选择 {n} 个视频',f'{n} videos selected'));add.setEnabled(n>0)
+        listing.itemSelectionChanged.connect(update_selection);update_selection();listing.load_thumbnails(pending)
+        try:
+            if d.exec()==QDialog.DialogCode.Accepted:
+                files=[i.data(Qt.ItemDataRole.UserRole) for i in listing.selectedItems()]
+                if files:self.add_files(files)
+        finally:listing.stop_loading();d.deleteLater()
     def add_files(self,files):self.work('import',lambda:[X.new_clip(f) for f in files])
     def work(self,kind,fn):
         if self.busy:return

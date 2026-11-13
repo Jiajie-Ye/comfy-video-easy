@@ -206,6 +206,20 @@ class ModernTests(unittest.TestCase):
         for j,path in jobs:
             self.w.selected_id=j['id'];self.w.refresh_history();self.assertEqual(self.w.player.source(),QUrl.fromLocalFile(str(path.resolve())))
         jobs[1][0]['files']=[];E.save_job(jobs[1][0]);self.w.refresh_history();self.assertTrue(self.w.player.source().isEmpty())
+    def test_editor_add_tasks_uses_thumbnail_multiselect(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+        from task_gallery import TaskGallery
+        choices=[('first.mp4','2026-11-13 12:00:00  ·  First pass — first.mp4\nprivate prompt'),('second.mp4','2026-11-13 12:00:00  ·  Second pass — second.mp4\nprivate prompt')]
+        def choose(dialog):
+            gallery=dialog.findChild(TaskGallery);self.assertEqual(gallery.count(),2)
+            for i in range(2):
+                self.assertEqual(gallery.item(i).toolTip(),'');self.assertNotIn('private prompt',gallery.item(i).text());gallery.item(i).setSelected(True)
+            return QDialog.DialogCode.Accepted
+        with patch.object(self.w,'completed_video_choices',return_value=choices),patch('editor_ui.QDialog.exec',choose),patch.object(self.w.editor,'add_files') as add:
+            self.w.editor.add_tasks();add.assert_called_once_with(['first.mp4','second.mp4'])
+        with patch.object(self.w,'completed_video_choices',return_value=choices),patch('editor_ui.QDialog.exec',return_value=QDialog.DialogCode.Rejected),patch.object(self.w.editor,'add_files') as add:
+            self.w.editor.add_tasks();add.assert_not_called()
     def test_delete_selected_editor_clip_and_undo(self):
         from PyQt6.QtCore import Qt,QPoint
         from PyQt6.QtTest import QTest

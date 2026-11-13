@@ -16,7 +16,7 @@ class CardDelegate(QStyledItemDelegate):
         if icon is not None:painter.drawPixmap(rect.x()+(rect.width()-160)//2,rect.y()+5,icon.pixmap(160,90))
         painter.setFont(option.font);painter.setPen(QColor('#24334c'))
         painter.drawText(QRect(rect.x()+7,rect.y()+97,rect.width()-14,18),Qt.AlignmentFlag.AlignCenter,lines[0][5:] if lines and len(lines[0])==19 else (lines[0] if lines else ''))
-        painter.setPen(QColor('#4670aa'));painter.drawText(QRect(rect.x()+7,rect.y()+116,rect.width()-14,18),Qt.AlignmentFlag.AlignCenter,lines[1] if len(lines)>1 else '')
+        painter.setPen(QColor('#4670aa'));painter.drawText(QRect(rect.x()+7,rect.y()+116,rect.width()-14,18),Qt.AlignmentFlag.AlignCenter,painter.fontMetrics().elidedText(lines[1] if len(lines)>1 else '',Qt.TextElideMode.ElideRight,rect.width()-14))
         painter.restore()
 
 class TaskGallery(QListWidget):
@@ -43,7 +43,7 @@ class TaskGallery(QListWidget):
         self.stop_loading();self.cancel=threading.Event();self.clear();self.cards={}
     def add_card(self,job,text,tooltip,cache):
         item=QListWidgetItem(self.placeholder,text);item.setData(Qt.ItemDataRole.UserRole,job['id']);item.setSizeHint(QSize(180,136));self.addItem(item)
-        video=next((Path(f) for f in reversed(job.get('files',[])) if Path(f).is_file() and Path(f).suffix.lower() in ('.mp4','.mov','.mkv','.webm','.avi')),None)
+        video=next((Path(f) for f in reversed(job.get('files',[])) if Path(f).is_file() and Path(f).suffix.lower() in ('.mp4','.mov','.mkv','.webm','.avi','.m4v')),None)
         if video is None:return item,None
         try:
             stat=video.stat();key=hashlib.sha256(f'{video.resolve()}|{stat.st_size}|{stat.st_mtime_ns}'.encode()).hexdigest()

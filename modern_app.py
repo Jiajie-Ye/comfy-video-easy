@@ -19,7 +19,7 @@ from enhancer_ui import EnhancementSettings,EnhancementReview,ReferenceReview
 from image_ui import ImageCreator
 from task_gallery import TaskGallery
 
-VERSION='0.6.7'
+VERSION='0.6.8'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
