@@ -12,7 +12,7 @@
 
 ## Windows 直接下载运行
 
-前往 [Releases 发布页面](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest)，下载 **ComfyVideoEasy_0.6.8_Windows.zip**，解压后双击 **AI视频助手.exe**，无需安装 Python 或配置开发环境。公开版不包含私人服务器地址、API 密钥或任务记录；请在高级设置中填写自己的 ComfyUI 地址，按需配置提示词增强和图像生成接口。页面里的 **Source code** 是开发者源码包，需要按下文配置 Python 环境。
+前往 [Releases 发布页面](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest)，下载 **ComfyVideoEasy_0.6.9_Windows.zip**，解压后双击 **AI视频助手.exe**，无需安装 Python 或配置开发环境。公开版不包含私人服务器地址、API 密钥或任务记录；请在高级设置中填写自己的 ComfyUI 地址，按需配置提示词增强和图像生成接口。页面里的 **Source code** 是开发者源码包，需要按下文配置 Python 环境。
 
 ## 功能
 

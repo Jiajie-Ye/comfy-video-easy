@@ -37,6 +37,19 @@ class ImageServiceTests(unittest.TestCase):
             with self.assertRaises(I.ImageError):I.save_images(d,[b'not an image'])
         with self.assertRaises(I.ImageError):I.parse_images('images',{'data':[]})
         with self.assertRaises(I.ImageError):I.request_data(cfg(),' ',[])
+    def test_provider_error_details_are_redacted_and_not_retried(self):
+        session=Mock();session.post.return_value=response({'error':{'code':'unsupported_endpoint','message':'Use image API. unit-test-secret Bearer other-token https://provider.example/v1 exact private prompt','request_id':'req-test'}},400)
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(I.ImageError) as error:I.generate(cfg(),'exact private prompt',[],d,session)
+        text=str(error.exception);self.assertIn('unsupported_endpoint',text);self.assertIn('req-test',text)
+        for private in ['unit-test-secret','other-token','https://provider.example/v1','exact private prompt']:self.assertNotIn(private,text)
+        session.post.assert_called_once();session.post.return_value.close.assert_called_once()
+    def test_error_categories_and_unreadable_body(self):
+        for code,expected in [('content_policy_violation','内容审核'),('insufficient_user_quota','额度'),('model_not_found','分组')]:
+            r=response({'error':{'code':code,'message':'group cannot route model' if code=='model_not_found' else 'rejected'}},400)
+            self.assertIn(expected,str(I.api_error(r,cfg(),'draft')))
+        r=Mock(status_code=503);r.iter_content.return_value=[b'<html>unit-test-secret</html>']
+        error=str(I.api_error(r,cfg(),'draft'));self.assertIn('HTTP 503',error);self.assertNotIn('<html>',error);self.assertNotIn('unit-test-secret',error)
     def test_image_download_has_no_provider_credentials(self):
         client=Mock();r=Mock(status_code=200);r.iter_content.return_value=[png()];client.get.return_value=r
         with patch('image_service.requests.Session') as session:
@@ -72,6 +85,6 @@ class ImageUITests(unittest.TestCase):
             self.assertFalse(dialog.busy);generate.assert_called_once();self.assertTrue(dialog.insert.isEnabled());self.assertFalse(dialog.preview.original.isNull())
         dialog.reject()
     def test_failed_generation_restores_controls_and_keeps_previous_result(self):
-        I.save_images(self.tmp.name,[png()]);dialog=ImageCreator(self.w);dialog.busy=True;dialog.inputs.setEnabled(False);dialog.finished([],'test failure');self.assertTrue(dialog.inputs.isEnabled());self.assertTrue(dialog.insert.isEnabled());self.assertEqual(dialog.results.count(),1);dialog.reject()
+        I.save_images(self.tmp.name,[png()]);dialog=ImageCreator(self.w);dialog.busy=True;dialog.inputs.setEnabled(False);dialog.finished([],'test failure');self.assertTrue(dialog.inputs.isEnabled());self.assertTrue(dialog.insert.isEnabled());self.assertEqual(dialog.results.count(),1);self.assertIn('历史',dialog.result_heading.text());self.assertTrue(dialog.error_details_button.isHidden() is False);self.assertEqual(json.loads((self.w.data/'image_error.json').read_text('utf-8'))['error'],'test failure');dialog.reject()
 
 if __name__=='__main__':unittest.main()

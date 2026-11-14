@@ -46,7 +46,7 @@ class ImageEvents(QObject):
 
 class ImageCreator(QDialog):
     def __init__(self,window):
-        super().__init__(window);self.window=window;self.t=window.t;self.data=window.data;self.result_path=None;self.busy=False;self.refs=[];self.events=ImageEvents(self);self.events.done.connect(self.finished)
+        super().__init__(window);self.window=window;self.t=window.t;self.data=window.data;self.result_path=None;self.busy=False;self.refs=[];self.latest_paths=set();self.last_error='';self.events=ImageEvents(self);self.events.done.connect(self.finished)
         self.setWindowTitle(self.t('人物/场景图像生成','Character / scene image generation'));self.resize(min(1060,window.width()-40),min(650,window.height()-40));v=QVBoxLayout(self);v.setContentsMargins(20,16,20,16)
         top=QHBoxLayout();top.addWidget(window.label(self.t('描述人物或场景，生成后再选择是否使用。','Describe a character or scene, then review before using.'),'muted',True));top.addStretch();self.settings=window.button(self.t('图像接口设置','Image API settings'),self.configure);top.addWidget(self.settings);v.addLayout(top)
         columns=QHBoxLayout();self.inputs=QWidget();left=QVBoxLayout(self.inputs);left.setContentsMargins(0,0,0,0);columns.addWidget(self.inputs,4);right=QVBoxLayout();columns.addLayout(right,5);v.addLayout(columns,1)
@@ -54,11 +54,11 @@ class ImageCreator(QDialog):
         left.addWidget(window.label(self.t('参考图片（可选，按列表顺序）','Reference images (optional, in list order)'),'section'));self.references=QListWidget();self.references.setIconSize(QSize(56,42));self.references.setMaximumHeight(140);self.references.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);left.addWidget(self.references)
         row=QHBoxLayout();row.addWidget(window.button(self.t('添加图片','Add images'),self.add_local));row.addWidget(window.button(self.t('从当前素材选','From current references'),self.add_current));row.addWidget(window.button(self.t('移除','Remove'),self.remove));left.addLayout(row)
         left.addWidget(window.label(self.t('点击生成会上传描述和这里选中的参考图。','Generate sends your description and these selected reference images.'),'muted',True));self.generate_button=window.button(self.t('生成图片','Generate image'),self.generate,'primary');left.addWidget(self.generate_button)
-        right.addWidget(window.label(self.t('生成结果','Generated images'),'section'));self.preview=ImagePreview();self.preview.setText(self.t('生成的图片将在这里显示','Generated images will appear here'));right.addWidget(self.preview,1)
+        self.result_heading=window.label(self.t('历史结果','Previous results'),'section');right.addWidget(self.result_heading);self.preview=ImagePreview();self.preview.setText(self.t('生成的图片将在这里显示','Generated images will appear here'));right.addWidget(self.preview,1)
         self.results=QListWidget();self.results.setViewMode(QListWidget.ViewMode.IconMode);self.results.setIconSize(QSize(72,54));self.results.setMaximumHeight(95);self.results.currentItemChanged.connect(self.selected_result);self.results.itemDoubleClicked.connect(self.large_preview);right.addWidget(self.results)
         row=QHBoxLayout();row.addWidget(window.button(self.t('查看大图','View larger'),self.large_preview));row.addStretch();self.insert=window.button(self.t('加入参考图片','Add to references'),self.use_result,'primary');self.insert.setEnabled(False);row.addWidget(self.insert);right.addLayout(row)
         self.note=window.label(self.t('结果会保存在工作目录；支持查看最近的生成图片。','Results are saved in your workspace; recent images are shown below.'),'muted',True);v.addWidget(self.note)
-        bottom=QHBoxLayout();bottom.addStretch();self.close_button=window.button(self.t('关闭','Close'),self.reject);bottom.addWidget(self.close_button);v.addLayout(bottom)
+        bottom=QHBoxLayout();self.error_details_button=window.button(self.t('查看错误详情','Error details'),self.show_error_details);self.error_details_button.hide();bottom.addWidget(self.error_details_button);bottom.addStretch();self.close_button=window.button(self.t('关闭','Close'),self.reject);bottom.addWidget(self.close_button);v.addLayout(bottom)
         try:
             draft=json.loads((self.data/'image_draft.json').read_text('utf-8'));self.prompt.setPlainText(draft.get('prompt',''));self.refs=[x for x in draft.get('references',[])[:9] if Path(x).is_file()]
         except (OSError,ValueError):pass
@@ -101,7 +101,7 @@ class ImageCreator(QDialog):
         except ValueError:
             cfg=self.configure()
             if cfg is None:return
-        self.save_draft();paths=list(self.refs);folder=self.data;self.busy=True;self.inputs.setEnabled(False);self.settings.setEnabled(False);self.insert.setEnabled(False);self.note.setText(self.t('正在生成图片，请稍候…','Generating an image, please wait…'))
+        self.last_error='';self.error_details_button.hide();self.latest_paths=set();self.result_heading.setText(self.t('正在生成 · 下方为历史结果','Generating · previous results below'));self.save_draft();paths=list(self.refs);folder=self.data;self.busy=True;self.inputs.setEnabled(False);self.settings.setEnabled(False);self.insert.setEnabled(False);self.note.setText(self.t('正在生成图片，请稍候…','Generating an image, please wait…'))
         def work():
             try:self.events.done.emit(I.generate(cfg,prompt,paths,folder),'')
             except Exception as exc:self.events.done.emit([],str(exc) if isinstance(exc,I.ImageError) else self.t('无法生成或保存图片，请检查接口和工作目录。','Cannot generate/save image. Check your API and workspace.'))
@@ -109,14 +109,22 @@ class ImageCreator(QDialog):
     def add_result(self,path):
         item=QListWidgetItem(QIcon(thumbnail(path,144,108)),str(self.results.count()+1));item.setData(Qt.ItemDataRole.UserRole,path);item.setToolTip(path);self.results.addItem(item)
     def finished(self,paths,error):
-        self.busy=False;self.inputs.setEnabled(True);self.settings.setEnabled(True)
+        self.busy=False;self.inputs.setEnabled(True);self.settings.setEnabled(True);self.latest_paths=set(paths);self.last_error=error;self.error_details_button.setVisible(bool(error))
+        if error:
+            try:E.atomic_json(self.data/'image_error.json',dict(error=error))
+            except OSError:pass
         for path in paths:self.add_result(path)
         if paths:self.results.setCurrentRow(self.results.count()-1)
         self.insert.setEnabled(self.results.currentItem() is not None)
-        self.note.setText(error or self.t('已保存。满意后点击“加入参考图片”；也可修改描述再次生成。','Saved. Choose Add to references, or revise the description and generate again.'))
+        if error:self.result_heading.setText(self.t('本次生成失败 · 下方为历史结果','Generation failed · previous results below'))
+        self.note.setText((error.splitlines()[0]+'\n'+self.t('点击“查看错误详情”了解原因。右侧旧图片不是本次结果。','Choose Error details. The previous image is not a new result.')) if error else self.t('已保存。满意后点击“加入参考图片”；也可修改描述再次生成。','Saved. Choose Add to references, or revise the description and generate again.'))
     def selected_result(self,item,previous=None):
         self.insert.setEnabled(item is not None and not self.busy)
-        if item:self.preview.show_image(item.data(Qt.ItemDataRole.UserRole))
+        if item:
+            path=item.data(Qt.ItemDataRole.UserRole);self.preview.show_image(path);self.result_heading.setText(self.t('本次生成结果','New result') if path in self.latest_paths else self.t('历史结果','Previous result'))
+    def show_error_details(self):
+        if not self.last_error:return
+        d=QDialog(self);d.setWindowTitle(self.t('图像生成错误详情','Image generation error details'));d.resize(680,330);layout=QVBoxLayout(d);text=QTextEdit();text.setReadOnly(True);text.setPlainText(self.last_error);layout.addWidget(text);layout.addWidget(self.window.button(self.t('关闭','Close'),d.accept));d.exec()
     def large_preview(self,*_):
         item=self.results.currentItem()
         if not item:return
