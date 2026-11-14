@@ -64,7 +64,16 @@ def request_data(c,prompt,refs):
     if c['kind']=='images':
         if c.get('api_key'):headers['Authorization']='Bearer '+c['api_key']
         body=dict(model=c['model'].strip(),prompt=prompt,n=1)
-        if refs:files=[('image[]',(f'reference_{i+1}.png',raw,'image/png')) for i,raw in enumerate(refs)]
+        if refs:
+            # Modelflare's GPT Image 2.5 gateway rejects multipart image[] in live tests.
+            # Its documented JSON edit contract preserves every reference in order.
+            json_edits=(urlsplit(c['url']).hostname=='modelflare.dev' and c['model'].strip() in ('gpt-image-2.5-sunburst','gpt-image-2.5-flare'))
+            if json_edits:
+                body['images']=[{'image_url':'data:image/png;base64,'+base64.b64encode(raw).decode('ascii')} for raw in refs]
+                if any(len(item['image_url'])>20971520 for item in body['images']):raise ImageError('Reference exceeds the provider data URL limit; use a smaller image / 参考图超过服务商内嵌图片上限，请缩小图片')
+            else:
+                field='image' if len(refs)==1 else 'image[]'
+                files=[(field,(f'reference_{i+1}.png',raw,'image/png')) for i,raw in enumerate(refs)]
     else:
         headers['x-goog-api-key']=c['api_key'];parts=[{'text':prompt}]
         parts.extend({'inlineData':{'mimeType':'image/png','data':base64.b64encode(raw).decode('ascii')}} for raw in refs)

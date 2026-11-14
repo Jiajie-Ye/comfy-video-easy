@@ -23,8 +23,20 @@ class ImageServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'private-name.png';p.write_bytes(png());session=Mock();session.post.return_value=response({'data':[{'b64_json':base64.b64encode(png()).decode()}]})
             paths=I.generate(cfg(),'A character',[str(p)],d,session);self.assertTrue(Path(paths[0]).is_file());args=session.post.call_args.kwargs
-            self.assertIn('data',args);self.assertNotIn('json',args);self.assertEqual(args['files'][0][0],'image[]');self.assertEqual(args['files'][0][1][0],'reference_1.png');self.assertFalse(args['allow_redirects']);session.post.assert_called_once()
+            self.assertIn('data',args);self.assertNotIn('json',args);self.assertEqual(args['files'][0][0],'image');self.assertEqual(args['files'][0][1][0],'reference_1.png');self.assertFalse(args['allow_redirects']);session.post.assert_called_once()
             metadata=Path(paths[0]).with_suffix('.json').read_text('utf-8');self.assertNotIn('unit-test-secret',metadata);self.assertNotIn('private-name',metadata)
+    def test_modelflare_json_reference_transport_and_generic_multipart(self):
+        c=cfg();c.update(url='https://modelflare.dev/v1',model='gpt-image-2.5-sunburst')
+        for refs in [[png()],[png(),b'second-reference']]:
+            url,headers,body,files=I.request_data(c,'Scene',refs)
+            self.assertTrue(url.endswith('/images/edits'));self.assertIsNone(files);self.assertEqual(len(body['images']),len(refs))
+            self.assertEqual([base64.b64decode(x['image_url'].split(',',1)[1]) for x in body['images']],refs)
+        _,_,body,files=I.request_data(c,'Scene',[]);self.assertNotIn('images',body);self.assertIsNone(files)
+        _,_,_,files=I.request_data(cfg(),'Scene',[png(),png()]);self.assertEqual([x[0] for x in files],['image[]','image[]'])
+        session=Mock();session.post.return_value=response({'data':[{'b64_json':base64.b64encode(png()).decode()}]})
+        with tempfile.TemporaryDirectory() as d:
+            image=Path(d)/'local.png';image.write_bytes(png());I.generate(c,'Scene',[str(image)],d,session)
+            args=session.post.call_args.kwargs;self.assertIn('json',args);self.assertNotIn('files',args);self.assertNotIn('data',args);session.post.assert_called_once()
     def test_text_only_and_gemini_payload(self):
         _,headers,body,files=I.request_data(cfg(),'Scene',[]);self.assertIsNone(files);self.assertEqual(body['n'],1)
         _,headers,body,files=I.request_data(cfg('gemini'),'Character',[png()]);self.assertEqual(headers['x-goog-api-key'],'unit-test-secret');self.assertIn('IMAGE',body['generationConfig']['responseModalities']);self.assertEqual(len(body['contents'][0]['parts']),2)
