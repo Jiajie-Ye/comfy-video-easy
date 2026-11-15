@@ -12,7 +12,7 @@
 
 ## Windows 直接下载运行
 
-前往 [Releases 发布页面](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest)，下载 **ComfyVideoEasy_0.6.10_Windows.zip**，解压后双击 **AI视频助手.exe**，无需安装 Python 或配置开发环境。公开版不包含私人服务器地址、API 密钥或任务记录；请在高级设置中填写自己的 ComfyUI 地址，按需配置提示词增强和图像生成接口。页面里的 **Source code** 是开发者源码包，需要按下文配置 Python 环境。
+前往 [Releases 发布页面](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest)，下载 **ComfyVideoEasy_0.6.11_Windows.zip**，解压后双击 **AI视频助手.exe**，无需安装 Python 或配置开发环境。公开版不包含私人服务器地址、API 密钥或任务记录；请在高级设置中填写自己的 ComfyUI 地址，按需配置提示词增强和图像生成接口。页面里的 **Source code** 是开发者源码包，需要按下文配置 Python 环境。
 
 ## 功能
 
@@ -92,9 +92,9 @@ API KEY 使用 Windows 当前账号 DPAPI 加密保存，不写入任务记录�
 
 在图片卡片点击“人物/场景图像生成”，打开独立窗口填写描述，可从本地或当前视频素材选择参考图片。首次生成会要求填写图像接口格式、URL、API KEY 和准确的图像模型名称，之后沿用保存的配置。右侧预览生成结果，可放大查看，满意后点击“加入参考图片”；不会自动插入，也不会改写视频剧本或改变已有首帧选择。
 
-支持 OpenAI Images 兼容接口（纯文本使用 `/images/generations`，带参考图使用 multipart `/images/edits`）及 Gemini `generateContent` 图像输出。这不是任意 Chat Completions 接口，所选模型须支持图像生成，带参考图还须支持图像输入。请求格式参考 [OpenAI 官方图像文档](https://developers.openai.com/api/docs/guides/image-generation)和 [Gemini 接口文档](https://ai.google.dev/api/generate-content)。每次请求一张图，若接口返回多个结果可选择。最多 9 张参考图，单张不超过 2500 万像素，转成 PNG 后总计不超过 15 MB。
+支持 OpenAI Images 兼容接口（纯文本使用 `/images/generations`，带参考图使用 `/images/edits`，按服务商选择 multipart 或 JSON）及 Gemini `generateContent` 图像输出。这不是任意 Chat Completions 接口，所选模型须支持图像生成，带参考图还须支持图像输入。请求格式参考 [OpenAI 官方图像文档](https://developers.openai.com/api/docs/guides/image-generation)和 [Gemini 接口文档](https://ai.google.dev/api/generate-content)。每次请求一张图，若接口返回多个结果可选择。最多 9 张参考图，单张不超过 2500 万像素，编码后总计不超过 15 MB。较大的不透明照片使用 JPEG 编码；单张参考图改用 multipart 文件上传，避免 JSON/Base64 请求体限制。Modelflare GPT Image 2.5 多张参考图仍按其 JSON 协议提交，较大的多图请求可能仍受网关限制。原文件、尺寸和透明通道保持不变。
 
-点击生成时会把描述和所选参考图内容发送到配置的服务商。图像密钥以 Windows DPAPI 加密，独立保存在 `image_settings.json`；与提示词增强互不覆盖。生成图片留在固定工作目录的 `generated_images` 中，窗口显示最近 20 张，并记住描述草稿。切换工作目录时会复制设置、草稿和生成结果。失败不自动重试。协议与界面测试使用模拟图片，真实服务商兼容性需用自己的图像接口配置验证。
+点击生成时会把描述和所选参考图内容发送到配置的服务商。图像密钥以 Windows DPAPI 加密，独立保存在 `image_settings.json`；与提示词增强互不覆盖。生成图片留在固定工作目录的 `generated_images` 中，窗口显示最近 20 张，并记住描述草稿。切换工作目录时会复制设置、草稿和生成结果。窗口显示处理阶段和已用时间，等待生成的读取超时为 10 分钟。错误详情区分请求、接收结果和图片下载，413 会明确提示上传过大。失败不自动重试。协议与界面测试使用模拟图片，真实服务商兼容性需用自己的图像接口配置验证。
 
 ## 固定工作目录与旧任务
 

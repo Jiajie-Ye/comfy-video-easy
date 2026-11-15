@@ -1,7 +1,7 @@
-import base64,json,os,tempfile,unittest
+import base64,json,os,tempfile,unittest,random
 from pathlib import Path
 from unittest.mock import Mock,patch
-from PyQt6.QtCore import QByteArray,QBuffer,QIODevice
+from PyQt6.QtCore import QByteArray,QBuffer,QIODevice,Qt
 from PyQt6.QtGui import QImage,QColor
 from PyQt6.QtWidgets import QApplication,QDialog
 import image_service as I
@@ -16,6 +16,34 @@ def response(data,status=200):
     r=Mock(status_code=status);r.iter_content.return_value=[json.dumps(data).encode()];return r
 
 class ImageServiceTests(unittest.TestCase):
+    def test_large_photo_encoding_preserves_dimensions_and_mime(self):
+        pixels=random.Random(7).randbytes(320*427*3)
+        image=QImage(pixels,320,427,320*3,QImage.Format.Format_RGB888).copy().scaled(1280,1708,Qt.AspectRatioMode.IgnoreAspectRatio,Qt.TransformationMode.SmoothTransformation)
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'photo.png';image.save(str(p),'PNG');before=p.read_bytes();raw=I.reference_bytes([p])[0]
+            self.assertLess(len(raw),len(before)//2);self.assertEqual(p.read_bytes(),before)
+            self.assertEqual(QImage.fromData(raw).size(),image.size());self.assertEqual(I.image_mime(raw),'image/jpeg')
+            _,_,_,files=I.request_data(cfg(),'Scene',[raw]);self.assertEqual(files[0][1][0],'reference_1.jpg');self.assertEqual(files[0][1][2],'image/jpeg')
+            c=cfg();c.update(url='https://modelflare.dev/v1',model='gpt-image-2.5-sunburst')
+            _,_,body,files=I.request_data(c,'Scene',[raw]);self.assertNotIn('images',body);self.assertEqual(files[0][1][2],'image/jpeg')
+            _,_,body,files=I.request_data(c,'Scene',[raw,raw]);self.assertIsNone(files);self.assertTrue(body['images'][0]['image_url'].startswith('data:image/jpeg;base64,'))
+            _,_,body,_=I.request_data(cfg('gemini'),'Scene',[raw]);self.assertEqual(body['contents'][0]['parts'][1]['inlineData']['mimeType'],'image/jpeg')
+        transparent=image.convertToFormat(QImage.Format.Format_ARGB32);transparent.setPixelColor(0,0,QColor(0,0,0,0))
+        raw=I.encode_reference(transparent);self.assertEqual(I.image_mime(raw),'image/png');self.assertEqual(QImage.fromData(raw).pixelColor(0,0).alpha(),0)
+    def test_network_errors_identify_phase_without_leaking_urls_or_retry(self):
+        import requests
+        for phase in ['request','response','images']:
+            s=Mock();s.post.return_value=response({'data':[{'url':'https://cdn.example/private-token'}]})
+            error=requests.ReadTimeout('unit-test-secret https://private.example/path')
+            if phase=='request':s.post.side_effect=error
+            if phase=='response':s.post.return_value.iter_content.side_effect=error
+            with tempfile.TemporaryDirectory() as d,patch('image_service.download',side_effect=error):
+                events=[]
+                with self.assertRaises(I.ImageError) as caught:I.generate(cfg(),'Scene',[],d,s,progress=events.append)
+            self.assertEqual(events[-1],phase);text=str(caught.exception);self.assertIn('ReadTimeout',text)
+            self.assertNotIn('unit-test-secret',text);self.assertNotIn('private.example',text);s.post.assert_called_once()
+            self.assertEqual(s.post.call_args.kwargs['timeout'],(30,600))
+        self.assertIn('超过服务商限制',str(I.api_error(response({},413),cfg(),'')))
     def test_endpoint_switch_and_native_gemini(self):
         c=cfg();c['url']='https://provider.example/v1/images/generations';self.assertEqual(I.endpoint(c,True),'https://provider.example/v1/images/edits');self.assertEqual(I.endpoint(c,False),c['url'])
         c.update(kind='gemini',url='https://provider.example',model='models/gemini-image');self.assertEqual(I.endpoint(c,True),'https://provider.example/v1beta/models/gemini-image:generateContent')
@@ -27,7 +55,7 @@ class ImageServiceTests(unittest.TestCase):
             metadata=Path(paths[0]).with_suffix('.json').read_text('utf-8');self.assertNotIn('unit-test-secret',metadata);self.assertNotIn('private-name',metadata)
     def test_modelflare_json_reference_transport_and_generic_multipart(self):
         c=cfg();c.update(url='https://modelflare.dev/v1',model='gpt-image-2.5-sunburst')
-        for refs in [[png()],[png(),b'second-reference']]:
+        for refs in [[png(),b'second-reference']]:
             url,headers,body,files=I.request_data(c,'Scene',refs)
             self.assertTrue(url.endswith('/images/edits'));self.assertIsNone(files);self.assertEqual(len(body['images']),len(refs))
             self.assertEqual([base64.b64decode(x['image_url'].split(',',1)[1]) for x in body['images']],refs)
@@ -36,7 +64,7 @@ class ImageServiceTests(unittest.TestCase):
         session=Mock();session.post.return_value=response({'data':[{'b64_json':base64.b64encode(png()).decode()}]})
         with tempfile.TemporaryDirectory() as d:
             image=Path(d)/'local.png';image.write_bytes(png());I.generate(c,'Scene',[str(image)],d,session)
-            args=session.post.call_args.kwargs;self.assertIn('json',args);self.assertNotIn('files',args);self.assertNotIn('data',args);session.post.assert_called_once()
+            args=session.post.call_args.kwargs;self.assertNotIn('json',args);self.assertEqual(args['files'][0][0],'image');self.assertIn('data',args);session.post.assert_called_once()
     def test_text_only_and_gemini_payload(self):
         _,headers,body,files=I.request_data(cfg(),'Scene',[]);self.assertIsNone(files);self.assertEqual(body['n'],1)
         _,headers,body,files=I.request_data(cfg('gemini'),'Character',[png()]);self.assertEqual(headers['x-goog-api-key'],'unit-test-secret');self.assertIn('IMAGE',body['generationConfig']['responseModalities']);self.assertEqual(len(body['contents'][0]['parts']),2)

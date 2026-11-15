@@ -42,6 +42,22 @@ def endpoint(c,has_refs):
         if base.endswith(suffix):base=base[:-len(suffix)];break
     return base+('/v1' if not urlsplit(base).path else '')+('/images/edits' if has_refs else '/images/generations')
 
+def image_mime(raw):
+    return 'image/jpeg' if raw.startswith(b'\xff\xd8\xff') else 'image/png'
+
+def encode_reference(image):
+    def encode(fmt,quality=-1):
+        data=QByteArray();buffer=QBuffer(data);buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        if not image.save(buffer,fmt,quality):raise ImageError('Cannot encode reference image / 无法编码参考图')
+        return bytes(data)
+    raw=encode('PNG')
+    # Photo JPEGs can grow tenfold when converted to PNG and then Base64.
+    # Keep small/transparent PNGs lossless; use JPEG for large opaque images.
+    if len(raw)>256*1024 and not image.hasAlphaChannel():
+        jpeg=encode('JPEG',90)
+        if len(jpeg)<len(raw):raw=jpeg
+    return raw
+
 def reference_bytes(paths):
     if len(paths)>9:raise ImageError('At most 9 references / 最多 9 张参考图')
     result=[];total=0
@@ -50,9 +66,7 @@ def reference_bytes(paths):
         if not size.isValid() or size.width()*size.height()>25000000:raise ImageError('Reference cannot be read or exceeds 25 megapixels / 参考图片无法读取或超过 2500 万像素')
         image=reader.read()
         if image.isNull():raise ImageError('Cannot read reference image / 无法读取参考图片')
-        data=QByteArray();buffer=QBuffer(data);buffer.open(QIODevice.OpenModeFlag.WriteOnly)
-        if not image.save(buffer,'PNG'):raise ImageError('Cannot encode reference image / 无法编码参考图')
-        raw=bytes(data);total+=len(raw)
+        raw=encode_reference(image);total+=len(raw)
         if total>15*1024*1024:raise ImageError('References exceed 15 MB after encoding; use smaller images / 参考图编码后总计超过 15 MB，请缩小图片')
         result.append(raw)
     return result
@@ -65,18 +79,19 @@ def request_data(c,prompt,refs):
         if c.get('api_key'):headers['Authorization']='Bearer '+c['api_key']
         body=dict(model=c['model'].strip(),prompt=prompt,n=1)
         if refs:
-            # Modelflare's GPT Image 2.5 gateway rejects multipart image[] in live tests.
-            # Its documented JSON edit contract preserves every reference in order.
-            json_edits=(urlsplit(c['url']).hostname=='modelflare.dev' and c['model'].strip() in ('gpt-image-2.5-sunburst','gpt-image-2.5-flare'))
+            # A single reference uses multipart image: the gateway rejects realistic
+            # JSON image bodies with 413. For multiple references retain its
+            # JSON contract (multipart image[] is rejected by this gateway).
+            json_edits=(len(refs)>1 and urlsplit(c['url']).hostname=='modelflare.dev' and c['model'].strip() in ('gpt-image-2.5-sunburst','gpt-image-2.5-flare'))
             if json_edits:
-                body['images']=[{'image_url':'data:image/png;base64,'+base64.b64encode(raw).decode('ascii')} for raw in refs]
-                if any(len(item['image_url'])>20971520 for item in body['images']):raise ImageError('Reference exceeds the provider data URL limit; use a smaller image / 参考图超过服务商内嵌图片上限，请缩小图片')
+                body['images']=[{'image_url':'data:'+image_mime(raw)+';base64,'+base64.b64encode(raw).decode('ascii')} for raw in refs]
+                if any(len(item['image_url'])>20971520 for item in body['images']):raise ImageError('Reference exceeds provider data URL limit / 参考图超过服务商内嵌图片上限')
             else:
                 field='image' if len(refs)==1 else 'image[]'
-                files=[(field,(f'reference_{i+1}.png',raw,'image/png')) for i,raw in enumerate(refs)]
+                files=[(field,(f'reference_{i+1}.'+('jpg' if image_mime(raw)=='image/jpeg' else 'png'),raw,image_mime(raw))) for i,raw in enumerate(refs)]
     else:
         headers['x-goog-api-key']=c['api_key'];parts=[{'text':prompt}]
-        parts.extend({'inlineData':{'mimeType':'image/png','data':base64.b64encode(raw).decode('ascii')}} for raw in refs)
+        parts.extend({'inlineData':{'mimeType':image_mime(raw),'data':base64.b64encode(raw).decode('ascii')}} for raw in refs)
         body={'contents':[{'role':'user','parts':parts}],'generationConfig':{'responseModalities':['TEXT','IMAGE']}}
     return url,headers,body,files
 
@@ -165,7 +180,9 @@ def api_error(response,c,prompt):
     if not message:message=safe_error_text(data.get('message',''),c,prompt)
     identifier=safe_error_text(data.get('request_id') or (error.get('request_id') if isinstance(error,dict) else '') or '',c,prompt)
     low=(code+' '+message).lower()
-    if any(x in low for x in ['content_policy','safety','moderation','content_filter']):
+    if status==413:
+        hint='参考图片上传内容超过服务商限制，请减少图片或缩小尺寸 / Reference upload exceeds provider limit; reduce image count or dimensions'
+    elif any(x in low for x in ['content_policy','safety','moderation','content_filter']):
         hint='服务商内容审核未通过，请查看具体原因 / Provider content review rejected the request'
     elif 'unsupported_endpoint' in low:
         hint='模型与接口格式不匹配，请按服务商要求选择图像接口 / Model and API format do not match'
@@ -183,17 +200,28 @@ def api_error(response,c,prompt):
     return ImageError('\n'.join(lines))
 
 
-def generate(c,prompt,paths,folder,session=None):
+def generate(c,prompt,paths,folder,session=None,progress=None):
+    started=time.monotonic();phase='prepare'
+    def report(value):
+        nonlocal phase
+        phase=value
+        if progress:progress(value)
+    report('prepare')
     refs=reference_bytes(paths);url,headers,body,files=request_data(c,prompt,refs);client=session or requests.Session();client.trust_env=False
     try:
         kwargs={'data':body,'files':files} if files else {'json':body}
-        r=client.post(url,headers=headers,timeout=(20,240),allow_redirects=False,stream=True,**kwargs)
+        report('request')
+        r=client.post(url,headers=headers,timeout=(30,600),allow_redirects=False,stream=True,**kwargs)
         if r.status_code!=200:
             raise api_error(r,c,prompt)
-        data=json.loads(bounded_response(r,80*1024*1024));images=parse_images(c['kind'],data);result=save_images(folder,images)
+        report('response');data=json.loads(bounded_response(r,80*1024*1024))
+        report('images');images=parse_images(c['kind'],data)
+        report('save');result=save_images(folder,images)
         E.atomic_json(Path(folder)/'generated_images'/(Path(result[0]).stem+'.json'),dict(prompt=prompt,reference_count=len(paths),images=[Path(p).name for p in result]))
         return result
-    except requests.RequestException:raise ImageError('Image request/download failed or timed out; no automatic retry. The provider may still have processed it / 请求或图片下载失败、超时，不会自动重试；服务商可能已处理请求') from None
+    except requests.RequestException as exc:
+        label={'request':'连接、上传或等待生成 / Connecting, uploading or waiting for generation','response':'接收生成结果 / Receiving API response','images':'下载生成图片 / Downloading generated image','save':'保存图片 / Saving image'}.get(phase,phase)
+        raise ImageError(f'图像请求未完成：{label}\n{type(exc).__name__} · {time.monotonic()-started:.0f}s · references={len(refs)} · upload={sum(map(len,refs))} bytes\n不会自动重试，服务商可能已处理请求 / No automatic retry; the provider may have processed the request') from None
     except (KeyError,TypeError,json.JSONDecodeError):raise ImageError('Unexpected image response format / 图像返回格式不匹配') from None
     finally:
         if session is None:client.close()

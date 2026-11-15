@@ -12,7 +12,7 @@ Prompt enhancement now first asks the configured model to map story entities to 
 
 ## Download for Windows
 
-Download **ComfyVideoEasy_0.6.10_Windows.zip** from [Releases](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest), extract it, then double-click **AI视频助手.exe**. No Python installation is required. The public build contains no personal server address, API credentials or task history. Configure your own ComfyUI server under Settings, and optional model APIs in their respective settings. GitHub’s **Source code** downloads are for developers and require the Python setup below.
+Download **ComfyVideoEasy_0.6.11_Windows.zip** from [Releases](https://github.com/Jiajie-Ye/comfy-video-easy/releases/latest), extract it, then double-click **AI视频助手.exe**. No Python installation is required. The public build contains no personal server address, API credentials or task history. Configure your own ComfyUI server under Settings, and optional model APIs in their respective settings. GitHub’s **Source code** downloads are for developers and require the Python setup below.
 
 ## Features
 
@@ -142,3 +142,5 @@ The self-test requires FFmpeg and FFprobe. Add `--check-server` to check the def
 ## License
 
 Application source: **GPL-3.0-only**, see [LICENSE](LICENSE). Third-party software and model weights retain their own licenses. See [THIRD_PARTY.md](THIRD_PARTY.md).
+
+Image reference uploads optimize large opaque photos as JPEG. Single references use multipart file uploads, avoiding JSON/Base64 body limits. Modelflare GPT Image 2.5 uses its JSON contract for multiple references; large multi-image requests may still exceed gateway limits. Original files, dimensions and transparency are preserved. Image generation shows its stage and elapsed time, waits up to 10 minutes for response activity, and distinguishes request, response and download errors without automatic retries.
