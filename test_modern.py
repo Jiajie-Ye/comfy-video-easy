@@ -185,6 +185,23 @@ class ModernTests(unittest.TestCase):
         p=Path(self.tmp.name)/'video.mp4';p.write_bytes(b'example')
         with patch.object(self.w,'choose_frame_source',return_value='tasks'),patch.object(self.w,'choose_completed_video',return_value=str(p)),patch('modern_app.QFileDialog.getOpenFileName') as browser,patch.object(self.w,'start_worker') as worker:
             self.w.extract_reference();browser.assert_not_called();worker.assert_called_once()
+    def test_last_frame_task_gallery_search_and_selection(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog,QLineEdit,QPushButton
+        from task_gallery import TaskGallery
+        choices=[('first.mp4','2026-11-15 12:00:00  ·  First pass — first.mp4\nblue castle'),('second.mp4','2026-11-15 13:00:00  ·  Second pass — second.mp4\ngreen forest')]
+        def choose(dialog):
+            gallery=dialog.findChild(TaskGallery);search=dialog.findChild(QLineEdit)
+            confirm=next(b for b in dialog.findChildren(QPushButton) if b.text() in ('提取并添加','Extract and add'))
+            self.assertFalse(confirm.isEnabled());self.assertEqual(gallery.count(),2)
+            self.assertEqual(gallery.item(0).toolTip(),'');self.assertNotIn('blue castle',gallery.item(0).text());self.assertFalse(gallery.item(0).icon().isNull())
+            gallery.setCurrentRow(0);self.assertTrue(confirm.isEnabled());search.setText('FOREST')
+            self.assertTrue(gallery.item(0).isHidden());self.assertFalse(gallery.item(1).isHidden());self.assertFalse(confirm.isEnabled())
+            gallery.setCurrentRow(1);self.assertTrue(confirm.isEnabled());confirm.click();return QDialog.DialogCode.Accepted
+        with patch.object(self.w,'completed_video_choices',return_value=choices),patch('modern_app.QDialog.exec',choose):
+            self.assertEqual(self.w.choose_completed_video(),'second.mp4')
+        with patch.object(self.w,'completed_video_choices',return_value=choices),patch('modern_app.QDialog.exec',return_value=QDialog.DialogCode.Rejected):
+            self.assertIsNone(self.w.choose_completed_video())
     def test_enum_wheel_does_not_change_value_but_dropdown_still_selects(self):
         from PyQt6.QtCore import Qt,QPoint,QPointF
         from PyQt6.QtGui import QWheelEvent

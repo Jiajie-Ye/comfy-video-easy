@@ -19,7 +19,7 @@ from enhancer_ui import EnhancementSettings,EnhancementReview,ReferenceReview
 from image_ui import ImageCreator
 from task_gallery import TaskGallery
 
-VERSION='0.6.11'
+VERSION='0.6.12'
 STYLE='''
 QWidget {font-family: "Segoe UI", "Microsoft YaHei UI";font-size:14px;color:#252525;background:#ffffff;}
 QMainWindow {background:#ffffff;}
@@ -595,13 +595,16 @@ class Window(QMainWindow):
             except (OSError,ValueError,TypeError):continue
         return choices
     def choose_completed_video(self):
-        dialog=QDialog(self);dialog.setWindowTitle(self.t('从已完成任务选择视频','Choose a video from completed tasks'));dialog.resize(min(720,self.width()-40),min(480,self.height()-60))
+        dialog=QDialog(self);dialog.setWindowTitle(self.t('从已完成任务选择视频','Choose a video from completed tasks'));dialog.resize(min(860,self.width()-40),min(580,self.height()-60))
         layout=QVBoxLayout(dialog);layout.setContentsMargins(20,20,20,20);layout.setSpacing(14)
         layout.addWidget(self.label(self.t('选择一个视频，提取末帧后会自动加入参考图片。','Choose a video. Its last frame will be added to your references.'),'section',True))
         search=QLineEdit();search.setPlaceholderText(self.t('搜索日期、视频名或描述','Search date, video name or description'));layout.addWidget(search)
-        listing=QListWidget();listing.setMinimumHeight(180);layout.addWidget(listing,1)
+        listing=TaskGallery();listing.setMinimumHeight(220);listing.setMaximumHeight(16777215);layout.addWidget(listing,1);pending=[]
         for path,label in self.completed_video_choices():
-            item=QListWidgetItem(label);item.setData(Qt.ItemDataRole.UserRole,path);item.setSizeHint(QSize(300,72));item.setToolTip(label);listing.addItem(item)
+            heading=label.split('\n',1)[0];created,separator,name=heading.partition('  ·  ')
+            item,request=listing.add_card(dict(id=path,files=[path]),created+'\n'+(name if separator else Path(path).name),'',self.data/'task_thumbnails')
+            item.setData(Qt.ItemDataRole.UserRole+1,label.casefold())
+            if request:pending.append(request)
         layout.addWidget(self.label(self.t('只显示“我的任务”中已完成且已下载的视频；缺失的视频请先重新下载。','Only completed, downloaded videos from My tasks are shown. Download missing files again first.'),'muted',True))
         if not listing.count():layout.addWidget(self.label(self.t('暂无可用视频。先生成视频，或到“我的任务”继续下载。','No videos available. Generate a video or resume a download in My tasks.'),'muted',True))
         actions=QHBoxLayout();actions.addStretch();actions.addWidget(self.button(self.t('取消','Cancel'),dialog.reject));result=[]
@@ -612,9 +615,12 @@ class Window(QMainWindow):
         listing.currentItemChanged.connect(lambda current,previous:confirm.setEnabled(current is not None and not current.isHidden()))
         listing.itemDoubleClicked.connect(lambda _:accept())
         def filter_items(text):
-            for i in range(listing.count()):listing.item(i).setHidden(text.casefold() not in listing.item(i).text().casefold())
+            for i in range(listing.count()):listing.item(i).setHidden(text.casefold() not in listing.item(i).data(Qt.ItemDataRole.UserRole+1))
             current=listing.currentItem();confirm.setEnabled(current is not None and not current.isHidden())
-        search.textChanged.connect(filter_items);dialog.exec();return result[0] if result else None
+        search.textChanged.connect(filter_items);listing.load_thumbnails(pending)
+        try:
+            dialog.exec();return result[0] if result else None
+        finally:listing.stop_loading();dialog.deleteLater()
     def add_reference_frame(self,path):
         picker=self.pickers['images']
         if len(picker.paths)>=picker.limit:
